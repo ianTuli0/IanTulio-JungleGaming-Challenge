@@ -1,0 +1,54 @@
+Leak investigation: heap snapshots (after forced GC) taken after 2 and after 5 cycles of
+Play -> ~12 s of combat (scripted bot, 2 s spawns) -> Pause -> Main Menu.
+Development build (class names are not minified), Chrome 154 headless, RX 580 (ANGLE D3D11).
+
+Live instances per constructor:
+
+constructor               after 2  after 5
+GameController                  0        0
+Simulation                      0        0
+GameRenderer                    0        0
+InputController                 0        0
+PerfMonitor                     0        0
+Application                     0        0
+WebGLRenderer                   0        0
+Container                       4        4   (module-level Pixi defaults, constant)
+Sprite                          1        1
+Graphics                        1        1
+TilingSprite                    0        0
+Texture                       241      241   (atlas frames, cached on purpose for the next match)
+TextureSource                   0        0
+ImageSource                     4        4   (the four atlas PNGs)
+Spritesheet                     0        0
+Ticker                          0        0
+AudioBufferSourceNode           1        1   (last UI click sound)
+GainNode                        1        1
+
+Top growth between the two snapshots (3 cycles), by self size:
+
+  Object                       +289 objects     +7248 bytes
+  Generator                     +28 objects     +1568 bytes
+  Promise                       +56 objects     +1120 bytes
+  ArrayBuffer                   +20 objects     +1040 bytes
+  Array                         +42 objects      +672 bytes
+  (closure contexts)            +32 objects      +772 bytes
+  BindGroup / EE / Set           +9 objects      +192 bytes
+
+Conclusion: nothing owned by a match survives leaving it. About 12 KB of generic objects appear over
+three cycles (runtime/library bookkeeping), which does not grow with match length or entity count.
+
+Heap self size per V8 node type, from a second run of the same procedure (after 2 and after 5 cycles, development build):
+
+type                  after 2    after 5     delta
+code                  5241720    5735552   +493832   (JIT: InstructionStream, FeedbackVector, ...)
+native               29238468   29309752    +71284
+string               10922997   10962549    +39552   (includes PixiJS shader sources, ~4.3 KB each)
+object                 331496     342300    +10804
+object shape           674504     680768     +6264
+closure                311204     313732     +2528
+number                  60180      61044      +864
+array                  551932     551456      -476
+
+Reading: the per-cycle JSHeapUsedSize growth is dominated by compiled code (V8 optimising the
+functions that run hot during combat), not by data retained from previous matches. See
+memory-12-cycles.log for the trend over twelve cycles on the production build.
