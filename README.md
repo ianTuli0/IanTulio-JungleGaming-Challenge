@@ -5,8 +5,7 @@ clock runs out: one point per ship sunk by your cannons. The match ends on time-
 
 Stack: React 19, TypeScript (strict), PixiJS 8, TanStack Query 5, Axios, MSW 3, Vite.
 
-**Link Vercel deploy:** ian-tulio-jungle-gaming-challenge.vercel.app
-
+**Link Vercel deploy:** https://ian-tulio-jungle-gaming-challenge.vercel.app
 Docs: [ARCHITECTURE.md](ARCHITECTURE.md) (design, contracts, balancing, limitations,
 [differentiators](ARCHITECTURE.md#differentiators)) and [PERFORMANCE.md](PERFORMANCE.md) (profiling).
 
