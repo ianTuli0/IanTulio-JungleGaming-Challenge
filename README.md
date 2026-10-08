@@ -5,7 +5,7 @@ clock runs out: one point per ship sunk by your cannons. The match ends on time-
 
 Stack: React 19, TypeScript (strict), PixiJS 8, TanStack Query 5, Axios, MSW 3, Vite.
 
-**Link Vercel deploy:** `<paste the Vercel URL here>`
+**Link Vercel deploy:** ian-tulio-jungle-gaming-challenge.vercel.app
 
 Docs: [ARCHITECTURE.md](ARCHITECTURE.md) (design, contracts, balancing, limitations,
 [differentiators](ARCHITECTURE.md#differentiators)) and [PERFORMANCE.md](PERFORMANCE.md) (profiling).
@@ -147,13 +147,6 @@ reproducible. Visual baselines in `e2e/visual.spec.ts-snapshots/` come from Wind
 | `?debug` | Draws island and wall colliders; exposes `window.__pirateBattle` (`state()`, `advance(seconds)`) |
 | `?perf` | FPS / frame-time / entity overlay; logs a report at the end of each match |
 
-## Deploy (Vercel)
-
-| Setting | Value |
-| --- | --- |
-| Framework preset | Vite |
-| Build command | `npm run build` |
-| Output directory | `dist` |
 
 The app uses hash routes, so reloading any URL works without rewrite rules. The build ships
 `mockServiceWorker.js`, so the published site runs the mocked API; service workers need HTTPS.
