@@ -74,6 +74,7 @@ function TouchControls({ game }: { game: GameController }) {
     <div className="touch-controls">
       {TOUCH.map((cluster, i) => (
         <div key={i} className={`touch-cluster ${i ? 'right' : 'left'}`}>
+          {!i && <MoveStick game={game} />}
           {cluster.map(({ control, icon, label }) => {
             const release = () => game.input.setTouch(control, false);
             return (
@@ -102,13 +103,17 @@ function TouchControls({ game }: { game: GameController }) {
   );
 }
 
-const STICK_RADIUS = 60; // px, half the base circle: how far the knob can travel
+const STICK_RADIUS = 60; // px: how far the knob can travel from the centre of the ring (the ring is 102px in radius, see .stick-base)
 const STICK_DEADZONE = 18; // px from the center before the ship reacts
 
-/** Floating stick for sailing: hold the empty area on the left and a semi-transparent circle appears under the finger. */
+/**
+ * Stick for sailing. Its zone is exactly the box of the left button cluster (behind the buttons): hold the
+ * empty part of it and a semi-transparent ring appears, centred on the three movement buttons and covering
+ * all of them (size and position come from CSS). The knob moves with the finger's drag.
+ */
 function MoveStick({ game }: { game: GameController }) {
-  const [stick, setStick] = useState<{ x: number; y: number; dx: number; dy: number } | null>(null);
-  const origin = useRef<{ id: number; x: number; y: number } | null>(null);
+  const [stick, setStick] = useState<{ dx: number; dy: number } | null>(null);
+  const origin = useRef<{ id: number; x: number; y: number } | null>(null); // where the finger landed, in client px
 
   const release = (e: ReactPointerEvent) => {
     if (e.pointerId !== origin.current?.id) return;
@@ -124,8 +129,8 @@ function MoveStick({ game }: { game: GameController }) {
       onPointerDown={(e) => {
         if (origin.current) return; // a second finger does not move the stick
         e.currentTarget.setPointerCapture(e.pointerId);
-        origin.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
-        setStick({ x: e.clientX, y: e.clientY, dx: 0, dy: 0 });
+        origin.current = { id: e.pointerId, x: e.clientX, y: e.clientY }; // the drag is measured from the finger, wherever in the zone it landed
+        setStick({ dx: 0, dy: 0 });
       }}
       onPointerMove={(e) => {
         const o = origin.current;
@@ -137,7 +142,7 @@ function MoveStick({ game }: { game: GameController }) {
           dx *= STICK_RADIUS / length;
           dy *= STICK_RADIUS / length;
         }
-        setStick({ x: o.x, y: o.y, dx, dy });
+        setStick((s) => s && { ...s, dx, dy });
         game.input.setStick(stickControls(dx, dy, STICK_DEADZONE));
       }}
       onPointerUp={release}
@@ -146,7 +151,7 @@ function MoveStick({ game }: { game: GameController }) {
       onContextMenu={(e) => e.preventDefault()}
     >
       {stick && (
-        <div className="stick-base" style={{ left: stick.x, top: stick.y, width: STICK_RADIUS * 2, height: STICK_RADIUS * 2 }}>
+        <div className="stick-base">
           <div className="stick-knob" style={{ transform: `translate(${stick.dx}px, ${stick.dy}px)` }} />
         </div>
       )}
@@ -240,7 +245,6 @@ function Match({ game, onRestart, onExit, onFinished }: { game: GameController; 
   return (
     <>
       <h1 className="sr-only">Battle in progress</h1>
-      <MoveStick game={game} />
       <Hud hud={hud} onPause={() => game.pause('manual')} />
       <TouchControls game={game} />
       <p className="sr-only" role="status" aria-live="polite">

@@ -262,7 +262,10 @@ reload) never reaches `recordMatch`, so it is never registered.
 
 - **Orientation.** Gameplay is landscape-only. Held upright on a touch device, the match pauses and the
   pause dialog turns into a large "Rotate your phone to play" message with only *Options*, *Controls* and
-  *Main Menu* (Resume and Restart need landscape); resuming while still in portrait pauses again. Menus
+  *Main Menu* (Resume and Restart need landscape); resuming while still in portrait pauses again. The
+  match is born upright, so its arena is sized for that shape; `resume()` therefore builds the simulation
+  and renderer again for the screen as it is now, if under a second has been played and the bounds differ
+  (otherwise the map would show small, with invisible walls at the sides). Menus
   work in both orientations, in a single column with nothing scrolling sideways.
 - **Menu without scrolling.** On touch screens and in any window too small for the two-column menu (under
   960 x 640), the *How to play* section leaves the menu and opens from a button in a `<dialog>`; on touch
@@ -292,9 +295,13 @@ reload) never reaches `recordMatch`, so it is never registered.
   on large screens and in the corner, without the logo, on small ones. iPhone Safari has no element
   fullscreen: there the button is hidden and the `*-web-app-capable` meta tags make the Home Screen
   shortcut open without bars.
-- **Touch controls.** Six hold-to-act buttons. Each button uses pointer capture, so several fingers work
-  at once (steer and fire). On top of the buttons, holding the left half of the screen shows a floating
-  stick (`MoveStick`, `game/stick.ts`): up sails forward, sideways turns, and down does nothing (there is
+- **Touch controls.** Six hold-to-act buttons. Every round button of a match (these six, pause and
+  fullscreen) is `--touch`, 60px; inside each cluster the buttons are 3px apart. Each button uses pointer
+  capture, so several fingers work at once (steer and fire). Behind the left buttons, holding the empty
+  part of their box shows a stick (`MoveStick`, `game/stick.ts`). Its zone is a grid item spanning the
+  whole left cluster, and its ring is centred on that box and sized (3.4 x `--touch`) to cover all three
+  movement buttons, whatever the spot the finger landed on; the drag is measured from where the finger
+  landed and moves the knob inside the ring. Up sails forward, sideways turns, and down does nothing (there is
   no reverse). It maps to the same `forward`/`turnLeft`/`turnRight` booleans (`input.setStick()`), so it
   is an 8-direction stick, not a proportional one.
 - **Controls legend.** The controls table shows only the column that applies to the device, through CSS

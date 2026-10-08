@@ -65,6 +65,28 @@ check('islands and arena edges block the hull', () => {
   assert.ok(p.x - halfLength >= radius - 0.5 && p.x < ARENA_WIDTH && p.y > 0 && p.y < ARENA_HEIGHT, 'stays inside the arena');
 });
 
+check('a hull pressed against an island still turns in place and sails away', () => {
+  const sim = quietSim();
+  const c = sim.colliders[0]; // central island
+  const p = sim.player;
+  const reach = Math.max(c.hw, c.hh) + 220;
+  p.x = c.cx + Math.cos(Math.PI / 4) * reach;
+  p.y = c.cy + Math.sin(Math.PI / 4) * reach;
+  p.angle = Math.atan2(c.cy - p.y, c.cx - p.x) - (40 * Math.PI) / 180; // glancing: the hull ends up lying along the shore
+  run(sim, 8, { forward: true });
+  const stuck = { x: p.x, y: p.y, angle: p.angle };
+  run(sim, 0.5, { forward: true });
+  assert.deepEqual([p.x, p.y], [stuck.x, stuck.y], 'pressed against the shore it cannot move');
+  run(sim, 1, { turnRight: true });
+  assert.ok(Math.abs(Math.atan2(Math.sin(p.angle - stuck.angle), Math.cos(p.angle - stuck.angle))) > 1, 'it turns although the swing of bow and stern overlaps the shore');
+  run(sim, 1.5, { forward: true });
+  assert.ok(Math.hypot(p.x - stuck.x, p.y - stuck.y) > 100, 'and then sails away');
+  const { radius, halfLength } = GAME_CONFIG.player.hull;
+  for (const k of [-1, 0, 1]) {
+    assert.ok(sim.obstacleDistance(p.x + Math.cos(p.angle) * halfLength * k, p.y + Math.sin(p.angle) * halfLength * k) >= radius - 0.5, 'turning never leaves the hull inside the island');
+  }
+});
+
 check('front cannon respects its cooldown', () => {
   const sim = quietSim();
   const shots = run(sim, 1, { fireFront: true }).filter((e) => e.type === 'shot');

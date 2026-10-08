@@ -1,6 +1,6 @@
 // 9. Abandoning a match, going back and forth between screens, and the touch controls.
 import { expect, test } from '@playwright/test';
-import { CFG, KEYS, advance, collectErrors, pressKey, readStorage, showsWhenFrozen, startMatch, state, touchHold, waitMatchRunning } from './helpers.ts';
+import { CFG, KEYS, advance, collectErrors, pressKey, readStorage, showsWhenFrozen, startMatch, state, touchHold, waitFor, waitMatchRunning } from './helpers.ts';
 
 const noMatchLeft = (page: import('@playwright/test').Page) => page.evaluate(() => ({ handle: window.__pirateBattle, canvases: document.querySelectorAll('canvas').length }));
 
@@ -111,6 +111,45 @@ test.describe('touch controls', () => {
     expect((await state(page)).projectiles).toBe(CFG.player.broadside.count);
   });
 
+  test('every round button of the match is 60px, with tight gaps inside each cluster', async ({ page }) => {
+    await startMatch(page);
+    const buttons = page.locator('.hud .round-btn:visible, .touch-btn');
+    expect(await buttons.count(), 'pause, fullscreen and the six touch buttons').toBe(8);
+    for (const box of await buttons.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON()))) {
+      expect([box.width, box.height]).toEqual([60, 60]);
+    }
+    for (const side of ['left', 'right']) {
+      const [a, b] = await page.locator(`.touch-cluster.${side} .touch-btn`).evaluateAll((els) => els.slice(0, 2).map((el) => el.getBoundingClientRect().toJSON()));
+      expect(Math.abs(a.x - b.x) - 60 < 4 || Math.abs(a.y - b.y) - 60 < 4, `${side} cluster: neighbouring buttons almost touch`).toBe(true);
+    }
+  });
+
+  test('the sailing stick ring is centred on the left buttons and covers all three', async ({ page }) => {
+    const start = await startMatch(page);
+    const box = (await page.locator('.touch-cluster.left').boundingBox())!;
+    const [x, y] = [box.x + 20, box.y + 20]; // the empty top-left corner of the cluster
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, id: 1 }] });
+    await waitFor(page, 'the stick circle', () => page.locator('.stick-base').isVisible());
+    const base = (await page.locator('.stick-base').boundingBox())!;
+    const [cx, cy, radius] = [base.x + base.width / 2, base.y + base.height / 2, base.width / 2];
+    expect(cx, 'ring centre x = cluster centre x').toBeCloseTo(box.x + box.width / 2, 0);
+    expect(cy, 'ring centre y = cluster centre y').toBeCloseTo(box.y + box.height / 2, 0);
+    for (const name of ['Sail forward', 'Turn left', 'Turn right']) {
+      const b = (await page.getByRole('button', { name }).boundingBox())!;
+      const reach = Math.hypot(b.x + b.width / 2 - cx, b.y + b.height / 2 - cy) + b.width / 2;
+      expect(reach, `the ring covers "${name}"`).toBeLessThanOrEqual(radius);
+    }
+
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y - 50, id: 1 }] });
+    await waitFor(page, 'the knob to follow the finger', async () => ((await page.locator('.stick-knob').getAttribute('style')) ?? '').includes('-50px'));
+    await advance(page, 1);
+    expect((await state(page)).player.y, 'sailing north').toBeLessThan(start.player.y - 40);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await waitFor(page, 'the stick to disappear', async () => !(await page.locator('.stick-base').isVisible()));
+    await cdp.detach();
+  });
+
   test('held fingers do not leak across a pause', async ({ page }) => {
     await startMatch(page);
     const lift = await touchHold(page, [page.getByRole('button', { name: 'Sail forward' })]);
@@ -165,5 +204,16 @@ test.describe('phone held upright', () => {
     const dialog = page.getByRole('dialog', { name: 'Paused' });
     await showsWhenFrozen(page, 'the pause menu', dialog);
     await expect(dialog.getByRole('button', { name: 'Resume' })).toBeVisible();
+  });
+
+  test('the sea is sized for the landscape screen once the phone is turned, not for the upright one', async ({ page }) => {
+    await startMatch(page);
+    await showsWhenFrozen(page, 'the rotate message', page.getByRole('dialog', { name: 'Rotate your phone to play' }));
+    await page.setViewportSize({ width: 915, height: 412 });
+    const dialog = page.getByRole('dialog', { name: 'Paused' });
+    await showsWhenFrozen(page, 'the pause menu', dialog);
+    await dialog.getByRole('button', { name: 'Resume' }).click();
+    const { bounds } = await state(page);
+    expect((bounds.x1 - bounds.x0) / (bounds.y1 - bounds.y0)).toBeCloseTo(915 / 412, 1);
   });
 });

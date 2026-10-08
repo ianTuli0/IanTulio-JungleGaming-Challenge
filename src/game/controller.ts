@@ -78,7 +78,7 @@ export class GameController {
   readonly hud: Store<HudState>;
   readonly input: InputController;
   private readonly opts: ControllerOptions;
-  private readonly sim: Simulation;
+  private sim: Simulation;
   private app: Application | null = null;
   private view: GameRenderer | null = null;
   private perf: PerfMonitor | null = null;
@@ -93,10 +93,8 @@ export class GameController {
 
   constructor(opts: ControllerOptions) {
     this.opts = opts;
-    // Snapshot: later changes to Options only affect the next match. The sea is sized to the screen
-    // the match starts on, so the arena fills it edge to edge.
-    const { clientWidth: w, clientHeight: h } = opts.host;
-    this.sim = new Simulation(createMatchConfig(opts.settings), opts.seed, arenaBounds(w && h ? w / h : ARENA_WIDTH / ARENA_HEIGHT));
+    // Snapshot: later changes to Options only affect the next match.
+    this.sim = this.newSim();
     this.input = new InputController(() => this.pause('manual'));
     this.hud = createStore<HudState>(this.snapshot());
   }
@@ -165,6 +163,7 @@ export class GameController {
     if (!this.paused || this.sim.status !== 'running') return;
     this.paused = false;
     this.pauseReason = null;
+    this.refit();
     this.acc = 0; // nothing from the paused period is simulated
     this.input.reset();
     this.input.enabled = true;
@@ -308,6 +307,34 @@ export class GameController {
     const prev = this.hud?.get();
     const same = prev && (Object.keys(next) as (keyof HudState)[]).every((k) => prev[k] === next[k]);
     return same ? prev : next;
+  }
+
+  /** The sea is sized to the screen the match starts on, so the arena fills it edge to edge. */
+  private newSim(bounds = this.screenBounds()): Simulation {
+    return new Simulation(createMatchConfig(this.opts.settings), this.opts.seed, bounds);
+  }
+
+  private screenBounds(): Bounds {
+    const { clientWidth: w, clientHeight: h } = this.opts.host;
+    return arenaBounds(w && h ? w / h : ARENA_WIDTH / ARENA_HEIGHT);
+  }
+
+  /**
+   * A phone that starts the match upright pauses at once with the arena sized for that shape; turned
+   * sideways, the map would show small with invisible walls. If nothing has happened yet, the match is
+   * built again for the shape the screen has now.
+   */
+  private refit(): void {
+    if (!this.app || !this.view || this.sim.elapsed >= 1) return;
+    const bounds = this.screenBounds();
+    const { x1, y1 } = this.sim.bounds;
+    if (bounds.x1 === x1 && bounds.y1 === y1) return;
+    this.sim = this.newSim(bounds);
+    this.view.destroy();
+    this.view = new GameRenderer(this.opts.assets, this.sim, this.opts.debug);
+    this.app.stage.addChild(this.view.world);
+    this.layout();
+    this.view.render(this.sim, 1, 0);
   }
 
   private readonly layout = () => {

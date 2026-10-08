@@ -41,10 +41,12 @@ test('a finished match is registered once and shows up in both tabs', async ({ p
   expect(await readStorage(page, KEYS.pending)).toEqual([]);
 });
 
-test('Continue with an empty name files the match in the history only', async ({ page }) => {
+test('Continue with an empty name files the match in the history only', async ({ page, isMobile }) => {
   await seedFinishedBattle(page, matchRecord({ score: 999 }));
   await page.goto('/');
-  await expect(page.getByText('Without a name, this battle is saved to your Match History only')).toBeVisible();
+  // The phone layout hides this note to save height.
+  const note = page.getByText('Without a name, this battle is saved to your Match History only');
+  await (isMobile ? expect(note).toBeHidden() : expect(note).toBeVisible());
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText('Not ranked (no name entered).')).toBeVisible();
   await expect(page.getByText("✔ Saved to the Captain's Log.")).toBeVisible();

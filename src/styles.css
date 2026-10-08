@@ -11,6 +11,8 @@
   --ok: #a8e69b;
   --wood: #8a5a2b;
   --ink: #3a2410;
+  /* Every round button of a match (pause, fullscreen, the six touch buttons). */
+  --touch: 60px;
   font-family: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
   line-height: 1.4;
   -webkit-text-size-adjust: 100%;
@@ -1097,22 +1099,24 @@ progress {
   color: #ffb0a0;
 }
 
-.touch-controls,
-.stick-zone {
+.touch-controls {
   display: none;
 }
 
-/* Left half, under the HUD and the buttons (it comes first in the DOM). */
+/* Spans the whole grid of the left cluster, so it is exactly the box of the three buttons; they come after it in the DOM and sit on top. */
 .stick-zone {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 50%;
+  position: relative;
+  grid-area: 1 / 1 / 3 / 4;
 }
 
+/* Centred on the three movement buttons and wide enough to cover all of them (the farthest point of the
+   side buttons is ~1.63 x --touch from the centre); the 3.4 x leaves a small margin. */
 .stick-base {
   position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--touch) * 3.4);
+  height: calc(var(--touch) * 3.4);
   transform: translate(-50%, -50%);
   border: 3px solid rgba(247, 233, 204, 0.45);
   border-radius: 50%;
@@ -1123,8 +1127,8 @@ progress {
 .stick-knob {
   position: absolute;
   inset: 0;
-  width: 52px;
-  height: 52px;
+  width: calc(var(--touch) * 1.3);
+  height: calc(var(--touch) * 1.3);
   margin: auto;
   border-radius: 50%;
   background: rgba(247, 233, 204, 0.5);
@@ -1148,8 +1152,7 @@ progress {
 }
 
 @media (any-pointer: coarse) {
-  .touch-controls,
-  .stick-zone {
+  .touch-controls {
     display: block;
   }
 }
@@ -1158,9 +1161,10 @@ progress {
   position: absolute;
   bottom: calc(max(10px, env(safe-area-inset-bottom)) + 60px);
   display: grid;
-  grid-template-columns: repeat(3, var(--touch, 88px));
-  grid-template-rows: repeat(2, calc(var(--touch, 88px) * 0.8));
-  gap: 4px 6px;
+  grid-template-columns: repeat(3, var(--touch));
+  /* The top button overlaps the empty middle cell of the bottom row, so the box is exactly the three buttons. */
+  grid-template-rows: calc(var(--touch) * 0.8) var(--touch);
+  gap: 2px 3px;
 }
 
 .touch-cluster.left {
@@ -1171,9 +1175,13 @@ progress {
   right: max(10px, env(safe-area-inset-right));
 }
 
+.touch-btn,
+.hud .round-btn {
+  width: var(--touch);
+  height: var(--touch);
+}
+
 .touch-btn {
-  width: var(--touch, 88px);
-  height: var(--touch, 88px);
   opacity: 0.92;
 }
 
@@ -1370,11 +1378,31 @@ progress {
     min-width: 140px;
   }
 
-  .menu-panel .row {
-    margin: 8px 0;
+  /* Ranking and Match History sit in the bottom corners of the frame, the last battle between them. */
+  .menu-main {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
   }
 
-  .menu-panel p.small {
+  .menu-main > :not(nav):not(p.small) {
+    grid-column: 1 / -1;
+  }
+
+  .menu-main > nav {
+    display: contents;
+  }
+
+  .menu-main > nav > .btn:first-child {
+    grid-area: 4 / 1;
+  }
+
+  .menu-main > nav > .btn:last-child {
+    grid-area: 4 / 3;
+  }
+
+  .menu-main > p.small {
+    grid-area: 4 / 2;
     margin: 4px 0;
   }
 
@@ -1676,21 +1704,27 @@ progress {
     font-size: 0.72rem;
   }
 
-  /* Result: score on the left, name and buttons on the right. */
+  /* Result: one centred column (score, name, Continue). The name hint and the "without a name" note are
+     dropped to save height; the field still points to both through aria-describedby. */
   .result-panel {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
-    column-gap: 24px;
-    align-items: center;
-    width: min(100%, 720px);
+    width: min(100%, 440px);
   }
 
   .big-score {
     font-size: 3rem;
   }
 
+  .result-actions .options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .result-actions .field {
     margin: 4px 0;
+  }
+
+  .result-actions .hint,
+  .result-actions .pending {
+    display: none;
   }
 
   input[type='text'] {

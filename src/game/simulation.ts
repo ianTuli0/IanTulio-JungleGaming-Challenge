@@ -365,9 +365,42 @@ export class Simulation {
     return false;
   }
 
+  /**
+   * Turns in place. Against a shore the swing of the bow or stern would overlap it (a hull lying along a
+   * beach can never turn either way), so the hull turns anyway and is pushed out of what it swept into.
+   */
   private rotate(ship: Ship, delta: number): void {
     const angle = wrapAngle(ship.angle + delta);
-    if (!this.blocked(ship, ship.x, ship.y, angle)) ship.angle = angle;
+    const pose = this.blocked(ship, ship.x, ship.y, angle) ? this.pushedClear(ship, angle) : ship;
+    if (!pose) return;
+    ship.angle = angle;
+    ship.x = pose.x;
+    ship.y = pose.y;
+  }
+
+  /** The ship's position moved just far enough to clear every island and arena edge at this heading, or null if it cannot. */
+  private pushedClear(ship: Ship, angle: number): { x: number; y: number } | null {
+    const { radius, halfLength } = ship.motion.hull;
+    const { x0, y0, x1, y1 } = this.bounds;
+    let { x, y } = ship;
+    for (let pass = 0; pass < 4; pass++) {
+      for (let k = -1; k <= 1; k++) {
+        const px = x + Math.cos(angle) * halfLength * k;
+        const py = y + Math.sin(angle) * halfLength * k;
+        const d = this.obstacleDistance(px, py);
+        if (d < radius) {
+          // the slope of the distance field points away from the island
+          const gx = this.obstacleDistance(px + 1, py) - this.obstacleDistance(px - 1, py);
+          const gy = this.obstacleDistance(px, py + 1) - this.obstacleDistance(px, py - 1);
+          const g = Math.hypot(gx, gy) || 1;
+          x += (gx / g) * (radius - d + 0.01);
+          y += (gy / g) * (radius - d + 0.01);
+        }
+        x += Math.max(0, x0 + radius - px + 0.01) + Math.min(0, x1 - radius - px - 0.01);
+        y += Math.max(0, y0 + radius - py + 0.01) + Math.min(0, y1 - radius - py - 0.01);
+      }
+    }
+    return this.blocked(ship, x, y, angle) ? null : { x, y };
   }
 
   /** Moves forward, sliding along obstacles; a head-on bump kills the speed. */
