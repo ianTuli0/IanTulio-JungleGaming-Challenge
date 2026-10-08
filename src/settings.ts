@@ -60,25 +60,36 @@ export function uuid(): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
+/** Local identity; the ranking name is chosen per match on the result screen. */
 export interface Player {
   id: string;
-  name: string;
 }
 
 export const player: Player =
   storage.read(KEYS.player, (raw) => {
     const p = raw as Player;
-    return p && typeof p.id === 'string' && typeof p.name === 'string' ? p : null;
+    return p && typeof p.id === 'string' ? { id: p.id } : null;
   }) ??
   (() => {
-    const fresh = { id: uuid(), name: 'Captain Jack' };
+    const fresh = { id: uuid() };
     storage.write(KEYS.player, fresh);
     return fresh;
   })();
 
-export const lastResultStore = createStore<MatchRecord | null>(storage.read(KEYS.lastResult, (r) => (isMatchRecord(r) ? r : null)));
+export interface LastResult {
+  record: MatchRecord;
+  /** False until the player answers the ranking-name step (or skips it with Continue). */
+  confirmed: boolean;
+}
 
-export function saveLastResult(record: MatchRecord | null): void {
-  lastResultStore.set(record);
-  storage.write(KEYS.lastResult, record);
+export const lastResultStore = createStore<LastResult | null>(
+  storage.read(KEYS.lastResult, (raw) => {
+    const r = raw as LastResult;
+    return r && typeof r.confirmed === 'boolean' && isMatchRecord(r.record) ? r : null;
+  }),
+);
+
+export function saveLastResult(result: LastResult | null): void {
+  lastResultStore.set(result);
+  storage.write(KEYS.lastResult, result);
 }

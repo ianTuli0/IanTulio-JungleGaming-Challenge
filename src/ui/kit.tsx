@@ -31,7 +31,8 @@ export function Button({ variant = 'primary', size = 'md', className = '', onCli
   );
 }
 
-export function RoundButton({ icon, label, className = '', onClick, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { icon: string; label: string }) {
+/** Round wooden button with an atlas icon, or `children` in its place. */
+export function RoundButton({ icon, label, className = '', onClick, children, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { icon?: string; label: string }) {
   return (
     <button
       type="button"
@@ -44,7 +45,7 @@ export function RoundButton({ icon, label, className = '', onClick, ...rest }: B
       }}
       {...rest}
     >
-      <Icon name={icon} />
+      {children ?? <Icon name={icon ?? ''} />}
     </button>
   );
 }
@@ -57,10 +58,6 @@ export function Panel({ children, className = '', labelledBy }: { children: Reac
   );
 }
 
-/**
- * Native modal <dialog>: the browser traps focus, makes the page inert and
- * restores focus on close. Escape is routed to `onCancel`.
- */
 export function Dialog({ open, onCancel, labelledBy, className = '', children }: { open: boolean; onCancel: () => void; labelledBy: string; className?: string; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {

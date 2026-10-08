@@ -1,8 +1,9 @@
 // Headless rule checks: `npm run test:unit`. Plain asserts, no framework.
 import assert from 'node:assert/strict';
-import { ARENA_HEIGHT, ARENA_WIDTH, obstacleDistance } from './arena.ts';
+import { ARENA_HEIGHT, ARENA_WIDTH, ISLAND_SHIFT_SECONDS, WALLS, arenaBounds } from './arena.ts';
 import { GAME_CONFIG, createMatchConfig, type GameConfig } from './config.ts';
 import { Simulation, type InputState, type SimEvent } from './simulation.ts';
+import { stickControls } from './stick.ts';
 
 const DT = 1 / 60;
 const idle: InputState = { forward: false, turnLeft: false, turnRight: false, fireFront: false, fireLeft: false, fireRight: false };
@@ -26,6 +27,14 @@ function check(name: string, fn: () => void): void {
   console.log(`ok - ${name}`);
 }
 
+check('virtual stick: up sails, sideways turns, down never reverses', () => {
+  assert.deepEqual(stickControls(0, 5, 20), []);
+  assert.deepEqual(stickControls(0, -50, 20), ['forward']);
+  assert.deepEqual(stickControls(-40, -40, 20), ['forward', 'turnLeft']);
+  assert.deepEqual(stickControls(50, 0, 20), ['turnRight']);
+  assert.deepEqual(stickControls(0, 60, 20), []);
+});
+
 check('sails forward and rotates both ways', () => {
   const sim = quietSim();
   const { x: x0, y: y0, angle: a0 } = sim.player;
@@ -43,13 +52,13 @@ check('sails forward and rotates both ways', () => {
 
 check('islands and arena edges block the hull', () => {
   const sim = quietSim();
-  run(sim, 15, { forward: true }); // straight into the island north of the start
+  run(sim, 15, { forward: true }); // straight into the central island north of the start
   const { radius, halfLength } = GAME_CONFIG.player.hull;
   const p = sim.player;
   for (const k of [-1, 0, 1]) {
     const x = p.x + Math.cos(p.angle) * halfLength * k;
     const y = p.y + Math.sin(p.angle) * halfLength * k;
-    assert.ok(obstacleDistance(x, y) >= radius - 0.5, 'hull never enters an island');
+    assert.ok(sim.obstacleDistance(x, y) >= radius - 0.5, 'hull never enters an island');
   }
   p.angle = Math.PI; // west, open water up to the arena edge
   run(sim, 20, { forward: true });
@@ -72,22 +81,64 @@ check('broadside fires three parallel balls per side', () => {
   assert.equal(sim.projectiles.filter((p) => p.owner === 'player').length, 3, 'cooldown blocks a second volley');
 });
 
-check('islands stop balls, open water sinks them at max range', () => {
+check('balls fly over islands; each fortress wall stops one ball, then breaks', () => {
   const sim = quietSim();
-  const north = run(sim, 1.2, { fireFront: true }).filter((e) => e.type === 'obstacle-hit');
-  assert.ok(north.length > 0, 'island north of the start absorbs the ball');
-  const sim2 = quietSim();
-  Object.assign(sim2.player, { x: 640, y: 720, angle: 0 }); // open water along the south edge
-  sim2.step(DT, { ...idle, fireFront: true });
-  const events = run(sim2, 1.5);
-  assert.ok(events.some((e) => e.type === 'splash') && !events.some((e) => e.type === 'obstacle-hit'));
-  assert.equal(sim2.projectiles.length, 0);
+  Object.assign(sim.player, { x: 704, y: 600 }); // middle of a wall column: bottom wall, courtyard, top wall, open water
+  const events = [...run(sim, 0.8, { fireFront: true }), ...run(sim, 1.5)];
+  const hits = events.filter((e) => e.type === 'wall-hit');
+  assert.equal(events.filter((e) => e.type === 'shot').length, 3);
+  assert.equal(hits.length, 2, 'first ball breaks the bottom wall, second the top wall');
+  assert.ok(hits.every((h) => h.broken) && new Set(hits.map((h) => h.wall)).size === 2);
+  assert.equal(events.filter((e) => e.type === 'splash').length, 1, 'third ball crosses the island and sinks in the water');
+  assert.equal(sim.wallBroken.filter(Boolean).length, 2);
+});
+
+check('towers stop every ball and never break', () => {
+  const sim = quietSim();
+  const tower = WALLS.findIndex((w) => w.broken === null && w.y === 384 && w.x < 600); // bottom-left tower
+  Object.assign(sim.player, { x: WALLS[tower].x + 32 });
+  const events = [...run(sim, 0.5, { fireFront: true }), ...run(sim, 1.5)];
+  const hits = events.filter((e) => e.type === 'wall-hit');
+  assert.equal(hits.length, 2);
+  assert.ok(hits.every((h) => h.wall === tower && !h.broken));
+  assert.ok(!events.some((e) => e.type === 'splash'));
+});
+
+check('peripheral islands resurface at another free slot, never on a ship', () => {
+  const sim = quietSim();
+  const before = [...sim.islandSlots];
+  const moved = run(sim, ISLAND_SHIFT_SECONDS + 0.05).filter((e) => e.type === 'island-moved');
+  assert.equal(moved.length, before.length, 'every island moves after the interval');
+  assert.ok(sim.islandSlots.every((k, i) => k !== before[i]) && new Set(sim.islandSlots).size === before.length);
+  // Park ships on most free spots: islands may only take what is left, and never surface under a hull.
+  const spots = sim.islandSpots;
+  sim.addEnemy('shooter', spots[0].x, spots[0].y, 0);
+  sim.addEnemy('shooter', spots[5].x, spots[5].y, 0);
+  Object.assign(sim.player, spots[3]);
+  for (let n = 0; n < 20; n++) {
+    sim.shiftIslands();
+    for (const ship of [sim.player, ...sim.enemies]) assert.ok(sim.obstacleDistance(ship.x, ship.y) > ship.motion.hull.radius);
+    assert.ok(!sim.islandSlots.some((k) => k === 0 || k === 5 || k === 3));
+  }
+});
+
+check('wide and tall screens get more sea around the same layout', () => {
+  const wide = arenaBounds(21 / 9);
+  const tall = arenaBounds(4 / 3);
+  assert.equal(wide.x1 - wide.x0, ARENA_HEIGHT * (21 / 9));
+  assert.ok(wide.x0 < 0 && wide.y0 === 0 && wide.y1 === ARENA_HEIGHT && wide.x1 - ARENA_WIDTH === -wide.x0);
+  assert.ok(tall.y0 < 0 && tall.x0 === 0 && (tall.x1 - tall.x0) / (tall.y1 - tall.y0) === 4 / 3);
+  const sim = new Simulation(createMatchConfig({ sessionSeconds: 60, spawnIntervalSeconds: 1e9 }, noSpawns), 3, wide);
+  assert.ok(sim.islandSpots.some((p) => p.x < 0) && sim.islandSpots.some((p) => p.x > ARENA_WIDTH), 'edge islands sit at the new edges');
+  Object.assign(sim.player, { x: 200, y: 520, angle: Math.PI }); // west, between the islands, into the extra sea
+  run(sim, 20, { forward: true });
+  assert.ok(sim.player.x < 0 && sim.player.x - GAME_CONFIG.player.hull.halfLength >= wide.x0 + GAME_CONFIG.player.hull.radius - 0.5);
 });
 
 check('each ball damages once and a kill scores exactly one point', () => {
   const sim = quietSim();
-  const enemy = sim.addEnemy('shooter', sim.player.x - 220, sim.player.y, 0);
-  sim.player.angle = Math.PI;
+  const enemy = sim.addEnemy('shooter', sim.player.x + 220, sim.player.y, Math.PI);
+  sim.player.angle = 0;
   sim.step(DT, { ...idle, fireFront: true });
   run(sim, 0.35);
   assert.equal(enemy.hp, GAME_CONFIG.shooter.maxHp - GAME_CONFIG.player.front.damage);
@@ -111,7 +162,7 @@ check('chaser rams: damages the player, explodes, does not score', () => {
 
 check('shooter closes in and opens fire', () => {
   const sim = quietSim();
-  sim.addEnemy('shooter', sim.player.x - 450, sim.player.y, 0);
+  sim.addEnemy('shooter', sim.player.x + 450, sim.player.y, Math.PI);
   const events = run(sim, 8);
   assert.ok(events.some((e) => e.type === 'shot' && e.owner === 'enemy'));
   assert.ok(sim.player.hp < GAME_CONFIG.player.maxHp);
@@ -119,7 +170,7 @@ check('shooter closes in and opens fire', () => {
 
 check('balls fired by a sunk enemy go down with it', () => {
   const sim = quietSim();
-  const shooter = sim.addEnemy('shooter', sim.player.x - 200, sim.player.y, 0);
+  const shooter = sim.addEnemy('shooter', sim.player.x + 200, sim.player.y, Math.PI);
   for (let i = 0; i < 300 && !sim.projectiles.some((p) => p.owner === 'enemy'); i++) sim.step(DT, idle);
   assert.ok(sim.projectiles.some((p) => p.owner === 'enemy'), 'the shooter fired');
   shooter.alive = false;
@@ -138,7 +189,7 @@ check('spawns follow the interval, mix both kinds and keep their distance', () =
       kinds.push(e.kind);
       const ship = sim.enemies.find((s) => s.id === e.shipId)!;
       assert.ok(Math.hypot(ship.x - sim.player.x, ship.y - sim.player.y) >= GAME_CONFIG.spawn.minPlayerDistance);
-      assert.ok(obstacleDistance(ship.x, ship.y) > ship.motion.hull.radius + ship.motion.hull.halfLength);
+      assert.ok(sim.obstacleDistance(ship.x, ship.y) > ship.motion.hull.radius + ship.motion.hull.halfLength);
     }
   }
   assert.deepEqual(kinds.slice(0, 2), ['chaser', 'shooter']);

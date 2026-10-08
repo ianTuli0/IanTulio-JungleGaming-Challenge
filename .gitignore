@@ -17,3 +17,10 @@ dist/
 
 # Profiling reports are part of the delivery
 !profiling/*.log
+
+# Playwright output (regenerate with npm run test:e2e)
+playwright-report/
+test-results/
+
+# Local notes
+ian.md

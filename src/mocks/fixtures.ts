@@ -32,6 +32,7 @@ export function buildFixtures(extraPerLeague = 0): MatchRecord[] {
         matchId: `fixture-${String(++n).padStart(4, '0')}`,
         playerId: `fixture-${name.toLowerCase().replace(/[^a-z]+/g, '-')}`,
         playerName: name,
+        ranked: true,
         playedAt: new Date(BASE_TIME - n * 47 * 60_000).toISOString(),
         score: Math.round(duration * pace),
         durationMs: duration * 1000,

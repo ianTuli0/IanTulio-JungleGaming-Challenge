@@ -1,15 +1,26 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from 'react';
 import { assetStatus, loadGameAssets } from '../game/assets.ts';
 import { GameController, type HudState, type MatchOutcome } from '../game/controller.ts';
 import type { Control } from '../game/input.ts';
+import { stickControls } from '../game/stick.ts';
 import { settingsStore } from '../settings.ts';
 import { useStore } from '../store.ts';
 import { ControlsLegend } from './MainMenu.tsx';
+import { FullscreenButton } from './fullscreen.tsx';
 import { OptionsForm } from './Options.tsx';
 import { Button, Dialog, Icon, RoundButton, formatClock, uiImage } from './kit.tsx';
 
 const params = new URLSearchParams(window.location.search);
 const FILL = { x: 30, w: 196, total: 256 }; // health_fill_* fill_rect from ui_sheet.json
+
+/** Phone held upright: the battle cannot be played like this. */
+const PORTRAIT_PHONE = '(orientation: portrait) and (any-pointer: coarse)';
+const watchPortrait = (onChange: () => void) => {
+  const query = window.matchMedia(PORTRAIT_PHONE);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+};
+const usePortraitPhone = () => useSyncExternalStore(watchPortrait, () => window.matchMedia(PORTRAIT_PHONE).matches);
 
 function Hud({ hud, onPause }: { hud: HudState; onPause: () => void }) {
   const ratio = hud.hp / hud.maxHp;
@@ -37,6 +48,7 @@ function Hud({ hud, onPause }: { hud: HudState; onPause: () => void }) {
           <span className="sr-only">Time left:</span>
           <span>{formatClock(hud.remaining)}</span>
         </p>
+        <FullscreenButton />
         <RoundButton icon="icon_pause" label="Pause" onClick={onPause} disabled={hud.phase !== 'running'} />
       </div>
     </header>
@@ -90,23 +102,84 @@ function TouchControls({ game }: { game: GameController }) {
   );
 }
 
+const STICK_RADIUS = 60; // px, half the base circle: how far the knob can travel
+const STICK_DEADZONE = 18; // px from the center before the ship reacts
+
+/** Floating stick for sailing: hold the empty area on the left and a semi-transparent circle appears under the finger. */
+function MoveStick({ game }: { game: GameController }) {
+  const [stick, setStick] = useState<{ x: number; y: number; dx: number; dy: number } | null>(null);
+  const origin = useRef<{ id: number; x: number; y: number } | null>(null);
+
+  const release = (e: ReactPointerEvent) => {
+    if (e.pointerId !== origin.current?.id) return;
+    origin.current = null;
+    setStick(null);
+    game.input.setStick([]);
+  };
+
+  return (
+    <div
+      className="stick-zone"
+      aria-hidden="true"
+      onPointerDown={(e) => {
+        if (origin.current) return; // a second finger does not move the stick
+        e.currentTarget.setPointerCapture(e.pointerId);
+        origin.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
+        setStick({ x: e.clientX, y: e.clientY, dx: 0, dy: 0 });
+      }}
+      onPointerMove={(e) => {
+        const o = origin.current;
+        if (!o || e.pointerId !== o.id) return;
+        let dx = e.clientX - o.x;
+        let dy = e.clientY - o.y;
+        const length = Math.hypot(dx, dy);
+        if (length > STICK_RADIUS) {
+          dx *= STICK_RADIUS / length;
+          dy *= STICK_RADIUS / length;
+        }
+        setStick({ x: o.x, y: o.y, dx, dy });
+        game.input.setStick(stickControls(dx, dy, STICK_DEADZONE));
+      }}
+      onPointerUp={release}
+      onPointerCancel={release}
+      onLostPointerCapture={release}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {stick && (
+        <div className="stick-base" style={{ left: stick.x, top: stick.y, width: STICK_RADIUS * 2, height: STICK_RADIUS * 2 }}>
+          <div className="stick-knob" style={{ transform: `translate(${stick.dx}px, ${stick.dy}px)` }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PauseDialog({ game, hud, onRestart, onExit }: { game: GameController; hud: HudState; onRestart: () => void; onExit: () => void }) {
   const [view, setView] = useState<'menu' | 'options' | 'controls'>('menu');
   const open = hud.phase === 'paused';
-  const reason =
-    hud.pauseReason === 'focus' || hud.pauseReason === 'hidden'
-      ? 'Paused while the game was in the background.'
-      : hud.pauseReason === 'orientation'
-        ? 'Rotate your device to landscape to keep sailing.'
-        : 'Ready when you are.';
+  // Upright phone: only the way out (options, controls, menu) and a big "rotate" message; Continue/Restart need landscape.
+  const rotate = usePortraitPhone() && view === 'menu';
+  const reason = hud.pauseReason === 'focus' || hud.pauseReason === 'hidden' ? 'Paused while the game was in the background.' : 'Ready when you are.';
   const resume = () => {
     setView('menu');
     game.resume();
   };
   return (
-    <Dialog open={open} onCancel={view === 'menu' ? resume : () => setView('menu')} labelledBy="pause-title" className="pause-dialog">
-      <h2 id="pause-title">{view === 'options' ? 'Options' : view === 'controls' ? 'Controls' : 'Paused'}</h2>
-      {view === 'menu' && (
+    <Dialog open={open} onCancel={view === 'menu' ? resume : () => setView('menu')} labelledBy="pause-title" className={`pause-dialog ${rotate ? 'rotate' : ''}`}>
+      <h2 id="pause-title">{view === 'options' ? 'Options' : view === 'controls' ? 'Controls' : rotate ? 'Rotate your phone to play' : 'Paused'}</h2>
+      {rotate && (
+        <>
+          <Icon name="icon_restart" className="rotate-icon" />
+          <div className="stack">
+            <Button onClick={() => setView('options')}>Options</Button>
+            <Button onClick={() => setView('controls')}>Controls</Button>
+            <Button variant="secondary" onClick={onExit}>
+              Main Menu
+            </Button>
+          </div>
+        </>
+      )}
+      {view === 'menu' && !rotate && (
         <>
           <p className="muted">{reason}</p>
           <div className="stack">
@@ -155,7 +228,7 @@ function Match({ game, onRestart, onExit, onFinished }: { game: GameController; 
   // Portrait on a phone is not supported: pause until the player rotates and resumes
   // (re-checked on every phase change, so resuming while still in portrait pauses again).
   useEffect(() => {
-    const portrait = window.matchMedia('(orientation: portrait) and (any-pointer: coarse)');
+    const portrait = window.matchMedia(PORTRAIT_PHONE);
     const check = () => {
       if (portrait.matches) game.pause('orientation');
     };
@@ -167,6 +240,7 @@ function Match({ game, onRestart, onExit, onFinished }: { game: GameController; 
   return (
     <>
       <h1 className="sr-only">Battle in progress</h1>
+      <MoveStick game={game} />
       <Hud hud={hud} onPause={() => game.pause('manual')} />
       <TouchControls game={game} />
       <p className="sr-only" role="status" aria-live="polite">
@@ -271,7 +345,7 @@ export default function GameScreen({
       )}
       <div className="rotate-overlay" aria-hidden="true">
         <Icon name="icon_restart" />
-        <p>Rotate your device to landscape</p>
+        <p>Rotate your phone to play</p>
       </div>
     </main>
   );

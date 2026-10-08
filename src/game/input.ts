@@ -21,6 +21,8 @@ export class InputController {
   enabled = false;
   private readonly keys = new Set<string>();
   private readonly touches = new Set<Control>();
+  /** Kept apart from the buttons, so releasing a button never drops what the stick holds (and vice versa). */
+  private stick = new Set<Control>();
   private readonly onPause: () => void;
 
   constructor(onPause: () => void) {
@@ -45,10 +47,18 @@ export class InputController {
     this.sync();
   }
 
+  /** Replaces the movement controls held by the virtual stick. */
+  setStick(controls: Control[]): void {
+    if (controls.length && !this.enabled) return;
+    this.stick = new Set(controls);
+    this.sync();
+  }
+
   /** Drops every held key/finger: nothing pressed before a pause leaks into the resume. */
   reset(): void {
     this.keys.clear();
     this.touches.clear();
+    this.stick.clear();
     this.sync();
   }
 
@@ -71,7 +81,7 @@ export class InputController {
 
   private sync(): void {
     for (const control of Object.keys(this.state) as Control[]) {
-      this.state[control] = this.touches.has(control) || KEY_BINDINGS[control].some((code) => this.keys.has(code));
+      this.state[control] = this.touches.has(control) || this.stick.has(control) || KEY_BINDINGS[control].some((code) => this.keys.has(code));
     }
   }
 }

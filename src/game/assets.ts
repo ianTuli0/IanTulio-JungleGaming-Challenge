@@ -6,15 +6,14 @@ import uiJson from '../../assets/spritesheet/ui_sheet.json';
 import uiPng from '../../assets/spritesheet/ui_sheet.png';
 import uiRetinaJson from '../../assets/spritesheet/ui_sheet_retina.json';
 import uiRetinaPng from '../../assets/spritesheet/ui_sheet_retina.png';
-import tilesPng from '../../assets/tilesheet/tiles_sheet.png';
-import tilesRetinaPng from '../../assets/tilesheet/tiles_sheet_retina.png';
-import waterPng from '../../assets/png/default/tiles/tile_73.png';
-import waterRetinaPng from '../../assets/png/retina/tiles/tile_73.png';
+import tilesPng from '../../assets/tilesheet/tiles_sheet_retina.png';
+import waterPng from '../../assets/png/retina/tiles/tile_73.png';
 
 export interface GameAssets {
   tiles: Spritesheet;
   ships: Spritesheet;
   ui: Spritesheet;
+  /** 128 px tile: draw it at tileScale 0.5. */
   water: Texture;
   /** `ui.layout.fill_rect` from the atlas metadata, in logical pixels. */
   enemyBarFill: { x: number; y: number; w: number; h: number };
@@ -45,26 +44,28 @@ function gridData(scale: number): SpritesheetData {
 }
 
 async function load(onProgress: (p: number) => void): Promise<GameAssets> {
-  // High-density screens get the 2x atlases; Spritesheet keeps logical sizes identical.
+  // Tiles are always 2x: the world is scaled up on most screens and the central island by 1.5x.
+  // The UI atlas follows the screen density. Spritesheet keeps logical sizes identical.
   const hd = window.devicePixelRatio >= 1.5;
-  const [tilesUrl, waterUrl, uiUrl] = hd ? [tilesRetinaPng, waterRetinaPng, uiRetinaPng] : [tilesPng, waterPng, uiPng];
-  const textures = await Assets.load<Texture>([tilesUrl, waterUrl, uiUrl, shipsPng], onProgress);
+  const uiUrl = hd ? uiRetinaPng : uiPng;
+  const textures = await Assets.load<Texture>([tilesPng, waterPng, uiUrl, shipsPng], onProgress);
   const uiData = hd ? uiRetinaJson : uiJson;
   const sheets = [
-    new Spritesheet(textures[tilesUrl], gridData(hd ? 2 : 1)),
+    new Spritesheet(textures[tilesPng], gridData(2)),
     new Spritesheet(textures[shipsPng], parseStarlingXml(shipsXml)),
     new Spritesheet(textures[uiUrl], uiData as SpritesheetData),
   ];
   await Promise.all(sheets.map((s) => s.parse()));
   const [tiles, ships, ui] = sheets;
-  return { tiles, ships, ui, water: textures[waterUrl], enemyBarFill: uiData.frames.enemy_health_fill_red.ui.layout.fill_rect };
+  return { tiles, ships, ui, water: textures[waterPng], enemyBarFill: uiData.frames.enemy_health_fill_red.ui.layout.fill_rect };
 }
 
 let pending: Promise<GameAssets> | null = null;
 
 /** Loads once and reuses the textures for every match; a failure clears the cache so Retry works. */
 export function loadGameAssets(): Promise<GameAssets> {
-  pending ??= load((progress) => assetStatus.set({ status: 'loading', progress }))
+  // Files still in flight when another one fails keep reporting progress: that must not undo the error state.
+  pending ??= load((progress) => assetStatus.get().status === 'loading' && assetStatus.set({ status: 'loading', progress }))
     .then((assets) => {
       assetStatus.set({ status: 'ready', progress: 1 });
       return assets;

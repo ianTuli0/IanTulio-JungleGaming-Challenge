@@ -2,7 +2,7 @@
 import { QueryClient, keepPreviousData, useMutation, useMutationState, useQuery } from '@tanstack/react-query';
 import { useEffect, useEffectEvent } from 'react';
 import type { MatchOutcome } from '../game/controller.ts';
-import { player, saveLastResult, uuid } from '../settings.ts';
+import { lastResultStore, player, saveLastResult, uuid } from '../settings.ts';
 import { createStore, storage, useStore } from '../store.ts';
 import { fetchHistory, fetchRanking, isRetryable, putMatch } from './client.ts';
 import { isMatchRecord, type MatchConfigSummary, type MatchRecord } from './contracts.ts';
@@ -76,21 +76,36 @@ export const useSubmitMatch = () => useMutation<MatchRecord, Error, MatchRecord>
 
 const isFor = (matchId: string) => (m: { state: { variables?: unknown } }) => (m.state.variables as MatchRecord | undefined)?.matchId === matchId;
 
-/** Turns a finished match into a record: persisted locally first, then queued for the server. */
+/**
+ * A finished match is persisted locally right away (it survives a reload) but only queued for the
+ * server once the player answers the ranking-name step on the result screen.
+ */
 export function recordMatch(outcome: MatchOutcome): MatchRecord {
+  // A previous result still waiting for that answer is filed unranked, so it is never lost.
+  const previous = lastResultStore.get();
+  if (previous && !previous.confirmed) confirmResult(previous.record, '');
   const record: MatchRecord = {
     matchId: uuid(),
     playerId: player.id,
-    playerName: player.name,
+    playerName: '',
+    ranked: false,
     playedAt: new Date().toISOString(),
     score: outcome.score,
     durationMs: outcome.durationMs,
     endReason: outcome.endReason,
     config: outcome.settings,
   };
-  saveLastResult(record);
-  pendingStore.set([...pendingStore.get(), record]);
+  saveLastResult({ record, confirmed: false });
   return record;
+}
+
+/** Continue on the result screen: a valid name enters the ranking, an empty one keeps it history-only. */
+export function confirmResult(record: MatchRecord, name: string): MatchRecord {
+  const playerName = name.trim();
+  const final: MatchRecord = { ...record, playerName, ranked: playerName !== '' };
+  saveLastResult({ record: final, confirmed: true });
+  pendingStore.set([...pendingStore.get(), final]);
+  return final;
 }
 
 export type SubmissionState =

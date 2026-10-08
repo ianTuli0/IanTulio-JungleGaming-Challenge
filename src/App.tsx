@@ -9,6 +9,7 @@ import { MainMenu } from './ui/MainMenu.tsx';
 import { NetworkPanel } from './ui/NetworkPanel.tsx';
 import { OptionsScreen } from './ui/Options.tsx';
 import { ResultScreen } from './ui/Result.tsx';
+import { useFitScreens } from './ui/fit.ts';
 import { Button } from './ui/kit.tsx';
 import { navigate, useRoute } from './ui/router.ts';
 
@@ -53,6 +54,7 @@ export function App({ mocksEnabled }: { mocksEnabled: boolean }) {
   // lazy() remembers a rejected import forever, so Retry needs a fresh one.
   const [GameScreen, setGameScreen] = useState(() => lazy(loadGameScreen));
   usePendingSync();
+  useFitScreens();
 
   useEffect(() => audio.setMuted(!soundEnabled), [soundEnabled]);
 

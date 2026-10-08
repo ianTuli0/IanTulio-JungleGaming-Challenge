@@ -19,6 +19,10 @@ reproducible with `npm run profile` (see [How to reproduce](#how-to-reproduce)).
 about 7 ms, both at 1080p and with a 3840 x 2160 canvas at three times the spawn rate. Nothing a match
 owns survives leaving it.
 
+> The logs in `profiling/` were generated with the previous map. With the cross-shaped central island,
+> the fortress walls, the edge islands that change places, crew members and sinking wreckage, the `?perf`
+> overlay showed the same p95 (7.1 ms); run `npm run profile` to regenerate the full reports.
+
 ## Reference environment
 
 | Item | Value |

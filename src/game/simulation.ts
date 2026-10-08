@@ -1,5 +1,21 @@
 // Pure game rules: no Pixi, no DOM. Advanced with fixed steps by the controller.
-import { ARENA_HEIGHT, ARENA_WIDTH, PLAYER_START, insideArena, obstacleDistance } from './arena.ts';
+import {
+  DEFAULT_BOUNDS,
+  ISLAND_SHIFT_SECONDS,
+  PERIPHERALS,
+  PLAYER_START,
+  WALLS,
+  blobCollider,
+  colliderDistance,
+  insideArena,
+  islandColliders,
+  islandSpots,
+  obstacleDistance,
+  peripheralBlob,
+  type Blob,
+  type Bounds,
+  type Collider,
+} from './arena.ts';
 import { createRng } from '../rng.ts';
 import type { EndReason, EnemyKind, MatchConfig, MotionConfig, ShipKind, WeaponConfig } from './config.ts';
 
@@ -51,7 +67,10 @@ export type SimEvent =
   | { type: 'shot'; owner: Owner; weapon: Weapon; muzzles: { x: number; y: number }[]; angle: number }
   | { type: 'hit'; shipId: number; kind: ShipKind; x: number; y: number; hp: number }
   | { type: 'splash'; x: number; y: number }
-  | { type: 'obstacle-hit'; x: number; y: number }
+  /** A ball hit a fortress wall (which breaks) or tower (which never does). */
+  | { type: 'wall-hit'; wall: number; x: number; y: number; broken: boolean }
+  /** A peripheral island went under and surfaced with its top-left corner at x, y. */
+  | { type: 'island-moved'; island: number; x: number; y: number }
   | { type: 'destroyed'; shipId: number; kind: ShipKind; x: number; y: number; angle: number; cause: 'shot' | 'ram' }
   | { type: 'spawn'; shipId: number; kind: EnemyKind }
   | { type: 'score'; score: number }
@@ -78,39 +97,57 @@ function segmentDistSq(px: number, py: number, ax: number, ay: number, bx: numbe
 // sail around islands instead of grinding against them.
 
 const NAV_CELL = 32;
-const NAV_COLS = Math.ceil(ARENA_WIDTH / NAV_CELL);
-const NAV_ROWS = Math.ceil(ARENA_HEIGHT / NAV_CELL);
 const NEIGHBOURS = [
   [1, 0], [-1, 0], [0, 1], [0, -1],
   [1, 1], [1, -1], [-1, 1], [-1, -1],
 ] as const;
 
 class NavField {
-  private readonly blocked = new Uint8Array(NAV_COLS * NAV_ROWS);
-  private readonly dist = new Int32Array(NAV_COLS * NAV_ROWS);
-  private readonly queue = new Int32Array(NAV_COLS * NAV_ROWS);
+  private readonly bounds: Bounds;
+  private readonly cols: number;
+  private readonly rows: number;
+  private readonly blocked: Uint8Array;
+  private readonly dist: Int32Array;
+  private readonly queue: Int32Array;
+  private readonly clearance: number;
   private target = -1;
 
-  constructor(clearance: number) {
-    for (let r = 0; r < NAV_ROWS; r++) {
-      for (let c = 0; c < NAV_COLS; c++) {
-        const x = (c + 0.5) * NAV_CELL;
-        const y = (r + 0.5) * NAV_CELL;
-        this.blocked[r * NAV_COLS + c] = obstacleDistance(x, y) < clearance || !insideArena(x, y, clearance * 0.6) ? 1 : 0;
-      }
+  constructor(bounds: Bounds, clearance: number, colliders: readonly Collider[]) {
+    this.bounds = bounds;
+    this.cols = Math.ceil((bounds.x1 - bounds.x0) / NAV_CELL);
+    this.rows = Math.ceil((bounds.y1 - bounds.y0) / NAV_CELL);
+    this.blocked = new Uint8Array(this.cols * this.rows);
+    this.dist = new Int32Array(this.cols * this.rows);
+    this.queue = new Int32Array(this.cols * this.rows);
+    this.clearance = clearance;
+    this.rebuild(colliders);
+  }
+
+  private centre(i: number): { x: number; y: number } {
+    const c = i % this.cols;
+    return { x: this.bounds.x0 + (c + 0.5) * NAV_CELL, y: this.bounds.y0 + ((i - c) / this.cols + 0.5) * NAV_CELL };
+  }
+
+  /** Marks the cells a hull cannot use; called again whenever islands move. */
+  rebuild(colliders: readonly Collider[]): void {
+    for (let i = 0; i < this.blocked.length; i++) {
+      const { x, y } = this.centre(i);
+      this.blocked[i] = obstacleDistance(colliders, x, y) < this.clearance || !insideArena(this.bounds, x, y, this.clearance * 0.6) ? 1 : 0;
     }
+    this.target = -1;
   }
 
   private cell(x: number, y: number): number {
-    const c = Math.min(NAV_COLS - 1, Math.max(0, Math.floor(x / NAV_CELL)));
-    const r = Math.min(NAV_ROWS - 1, Math.max(0, Math.floor(y / NAV_CELL)));
-    return r * NAV_COLS + c;
+    const c = Math.min(this.cols - 1, Math.max(0, Math.floor((x - this.bounds.x0) / NAV_CELL)));
+    const r = Math.min(this.rows - 1, Math.max(0, Math.floor((y - this.bounds.y0) / NAV_CELL)));
+    return r * this.cols + c;
   }
 
   update(x: number, y: number): void {
     const start = this.cell(x, y);
     if (start === this.target) return;
     this.target = start;
+    const cols = this.cols;
     this.dist.fill(-1);
     this.dist[start] = 0;
     let head = 0;
@@ -118,16 +155,16 @@ class NavField {
     this.queue[tail++] = start;
     while (head < tail) {
       const i = this.queue[head++];
-      const c = i % NAV_COLS;
-      const r = (i - c) / NAV_COLS;
+      const c = i % cols;
+      const r = (i - c) / cols;
       for (const [dc, dr] of NEIGHBOURS) {
         const nc = c + dc;
         const nr = r + dr;
-        if (nc < 0 || nr < 0 || nc >= NAV_COLS || nr >= NAV_ROWS) continue;
-        const n = nr * NAV_COLS + nc;
+        if (nc < 0 || nr < 0 || nc >= cols || nr >= this.rows) continue;
+        const n = nr * cols + nc;
         if (this.dist[n] !== -1 || this.blocked[n]) continue;
         // No corner cutting around island edges.
-        if (dc && dr && (this.blocked[r * NAV_COLS + nc] || this.blocked[nr * NAV_COLS + c])) continue;
+        if (dc && dr && (this.blocked[r * cols + nc] || this.blocked[nr * cols + c])) continue;
         this.dist[n] = this.dist[i] + 1;
         this.queue[tail++] = n;
       }
@@ -137,37 +174,30 @@ class NavField {
   /** Centre of the neighbouring cell that is closest to the player, or null if unknown. */
   next(x: number, y: number): { x: number; y: number } | null {
     const i = this.cell(x, y);
-    const c = i % NAV_COLS;
-    const r = (i - c) / NAV_COLS;
+    const c = i % this.cols;
+    const r = (i - c) / this.cols;
     let best = -1;
     let bestDist = this.dist[i] === -1 ? Infinity : this.dist[i];
     for (const [dc, dr] of NEIGHBOURS) {
       const nc = c + dc;
       const nr = r + dr;
-      if (nc < 0 || nr < 0 || nc >= NAV_COLS || nr >= NAV_ROWS) continue;
-      const n = nr * NAV_COLS + nc;
+      if (nc < 0 || nr < 0 || nc >= this.cols || nr >= this.rows) continue;
+      const n = nr * this.cols + nc;
       if (this.dist[n] !== -1 && this.dist[n] < bestDist) {
         bestDist = this.dist[n];
         best = n;
       }
     }
-    if (best === -1) return null;
-    const bc = best % NAV_COLS;
-    return { x: (bc + 0.5) * NAV_CELL, y: ((best - bc) / NAV_COLS + 0.5) * NAV_CELL };
+    return best === -1 ? null : this.centre(best);
   }
 
-  /** Water cell centres near the arena border: candidate spawn points. */
+  /** Cell centres near the border: candidate spawn points (islands are checked at spawn time). */
   edgeCells(band: number, clearance: number): { x: number; y: number }[] {
-    const out: { x: number; y: number }[] = [];
-    for (let r = 0; r < NAV_ROWS; r++) {
-      for (let c = 0; c < NAV_COLS; c++) {
-        const x = (c + 0.5) * NAV_CELL;
-        const y = (r + 0.5) * NAV_CELL;
-        const edge = Math.min(x, y, ARENA_WIDTH - x, ARENA_HEIGHT - y);
-        if (edge >= clearance && edge <= band && obstacleDistance(x, y) > clearance) out.push({ x, y });
-      }
-    }
-    return out;
+    const { x0, y0, x1, y1 } = this.bounds;
+    return Array.from(this.blocked, (_, i) => this.centre(i)).filter(({ x, y }) => {
+      const edge = Math.min(x - x0, y - y0, x1 - x, y1 - y);
+      return edge >= clearance && edge <= band;
+    });
   }
 }
 
@@ -179,6 +209,14 @@ export class Simulation {
   endReason: EndReason | null = null;
   elapsed = 0;
   score = 0;
+  /** One flag per WALLS entry: a broken wall lets every later ball through. */
+  readonly wallBroken = WALLS.map(() => false);
+  /** Navigable rectangle: the designed layout plus open sea to fill the player's screen. */
+  readonly bounds: Bounds;
+  /** Where peripheral islands can surface, and the spot index each one is at. */
+  readonly islandSpots: { x: number; y: number }[];
+  readonly islandSlots = PERIPHERALS.map((p) => p.slot);
+  colliders: Collider[];
   readonly player: Ship;
   enemies: Ship[] = [];
   projectiles: Projectile[] = [];
@@ -190,19 +228,25 @@ export class Simulation {
   private readonly rng: () => number;
   private readonly nav: NavField;
   private readonly spawnPoints: { x: number; y: number }[];
+  private readonly spawnClearance: number;
+  private islandTimer = ISLAND_SHIFT_SECONDS;
 
-  constructor(config: MatchConfig, seed: number) {
+  constructor(config: MatchConfig, seed: number, bounds: Bounds = DEFAULT_BOUNDS) {
     this.config = config;
+    this.bounds = bounds;
+    this.islandSpots = islandSpots(bounds);
+    this.colliders = islandColliders(PERIPHERALS.map((_, i) => this.peripheral(i)));
     this.rng = createRng(seed);
     this.player = this.createShip('player', PLAYER_START.x, PLAYER_START.y, PLAYER_START.angle);
     this.spawnTimer = Math.min(config.spawn.firstSpawnDelaySeconds, config.spawnIntervalSeconds);
     const largest = Math.max(config.chaser.hull.radius, config.shooter.hull.radius);
-    this.nav = new NavField(largest + 4);
+    this.nav = new NavField(bounds, largest + 4, this.colliders);
     const fit = Math.max(
       config.chaser.hull.radius + config.chaser.hull.halfLength,
       config.shooter.hull.radius + config.shooter.hull.halfLength,
     );
-    this.spawnPoints = this.nav.edgeCells(150, fit + 4);
+    this.spawnClearance = fit + 4;
+    this.spawnPoints = this.nav.edgeCells(150, this.spawnClearance);
   }
 
   get remaining(): number {
@@ -230,6 +274,11 @@ export class Simulation {
     }
 
     this.updatePlayer(dt, input);
+    this.islandTimer -= dt;
+    if (this.islandTimer <= 0) {
+      this.islandTimer += ISLAND_SHIFT_SECONDS;
+      this.shiftIslands();
+    }
     this.updateSpawner(dt);
     this.nav.update(this.player.x, this.player.y);
     for (const e of this.enemies) this.updateEnemy(e, dt);
@@ -250,6 +299,35 @@ export class Simulation {
     this.enemies.push(ship);
     this.events.push({ type: 'spawn', shipId: ship.id, kind });
     return ship;
+  }
+
+  /** Signed distance to the nearest island at its current position (negative = on land). */
+  obstacleDistance(x: number, y: number): number {
+    return obstacleDistance(this.colliders, x, y);
+  }
+
+  /** Sand area of a peripheral island at its current spot. */
+  peripheral(island: number): Blob {
+    return peripheralBlob(island, this.islandSpots[this.islandSlots[island]]);
+  }
+
+  /** Each peripheral island goes under and surfaces at another free spot, never on a ship. */
+  shiftIslands(): void {
+    PERIPHERALS.forEach((_, i) => {
+      const free = this.islandSpots.map((_, k) => k).filter((k) => {
+        if (this.islandSlots.includes(k)) return false;
+        const c = blobCollider(peripheralBlob(i, this.islandSpots[k]));
+        return [this.player, ...this.enemies].every(
+          (s) => !s.alive || this.circles(s).every(([x, y]) => colliderDistance(c, x, y) > s.motion.hull.radius + 12),
+        );
+      });
+      if (!free.length) return; // every other slot has a ship on it: stays put until the next shift
+      this.islandSlots[i] = free[Math.floor(this.rng() * free.length)];
+      const { x, y } = this.peripheral(i);
+      this.events.push({ type: 'island-moved', island: i, x, y });
+    });
+    this.colliders = islandColliders(PERIPHERALS.map((_, i) => this.peripheral(i)));
+    this.nav.rebuild(this.colliders);
   }
 
   // -- ships -----------------------------------------------------------------
@@ -282,7 +360,7 @@ export class Simulation {
     for (let k = -1; k <= 1; k++) {
       const px = x + ox * k;
       const py = y + oy * k;
-      if (!insideArena(px, py, radius) || obstacleDistance(px, py) < radius) return true;
+      if (!insideArena(this.bounds, px, py, radius) || this.obstacleDistance(px, py) < radius) return true;
     }
     return false;
   }
@@ -386,8 +464,10 @@ export class Simulation {
     const hull = this.config[kind].hull;
     const p = this.player;
     const others = [p, ...this.enemies];
-    const free = this.spawnPoints.filter((pt) =>
-      others.every((s) => Math.hypot(s.x - pt.x, s.y - pt.y) > (hull.radius + hull.halfLength) * 2 + 8),
+    const free = this.spawnPoints.filter(
+      (pt) =>
+        this.obstacleDistance(pt.x, pt.y) > this.spawnClearance &&
+        others.every((s) => Math.hypot(s.x - pt.x, s.y - pt.y) > (hull.radius + hull.halfLength) * 2 + 8),
     );
     const far = free.filter((pt) => Math.hypot(p.x - pt.x, p.y - pt.y) >= this.config.spawn.minPlayerDistance);
     // Fallback (tiny arenas / crowded edges): the free point farthest from the player.
@@ -409,7 +489,7 @@ export class Simulation {
     const steps = Math.ceil(len / 12);
     for (let i = 1; i < steps; i++) {
       const t = i / steps;
-      if (obstacleDistance(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t) < radius) return false;
+      if (this.obstacleDistance(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t) < radius) return false;
     }
     return true;
   }
@@ -431,10 +511,12 @@ export class Simulation {
     this.tickCooldowns(e, dt);
     if (e.kind === 'shooter') {
       const cfg = this.config.shooter;
-      if (sight && dist <= cfg.holdRange) throttle = 0;
-      else if (sight && dist <= cfg.attackRange) throttle = 0.35;
+      // Balls fly over islands, so in range it just turns to aim (walls may still eat the shot).
+      if (dist <= cfg.attackRange) heading = toPlayer;
+      if (dist <= cfg.holdRange) throttle = 0;
+      else if (dist <= cfg.attackRange) throttle = 0.35;
       const aimError = Math.abs(wrapAngle(toPlayer - e.angle));
-      if (sight && dist <= cfg.attackRange && aimError <= cfg.aimTolerance && e.cooldowns.front <= 0) {
+      if (dist <= cfg.attackRange && aimError <= cfg.aimTolerance && e.cooldowns.front <= 0) {
         e.cooldowns.front = cfg.cannon.cooldown;
         this.fire(e, 'front', cfg.cannon, 1, 0);
       }
@@ -506,6 +588,12 @@ export class Simulation {
     }
   }
 
+  /** Intact wall or tower under a ball, or -1. Islands themselves do not stop balls. */
+  private wallAt(x: number, y: number): number {
+    const r = this.config.projectileRadius;
+    return WALLS.findIndex((w, i) => !this.wallBroken[i] && x > w.x0 - r && x < w.x1 + r && y > w.y0 - r && y < w.y1 + r);
+  }
+
   /** Capsule test used for cannonball hits. */
   private hitTest(s: Ship, x: number, y: number): boolean {
     const { radius, halfLength } = s.motion.hull;
@@ -528,9 +616,12 @@ export class Simulation {
       b.x += b.vx * dt;
       b.y += b.vy * dt;
       b.ttl -= dt;
-      if (!insideArena(b.x, b.y)) continue;
-      if (obstacleDistance(b.x, b.y) < 0) {
-        this.events.push({ type: 'obstacle-hit', x: b.x, y: b.y });
+      if (!insideArena(this.bounds, b.x, b.y)) continue;
+      const wall = this.wallAt(b.x, b.y);
+      if (wall !== -1) {
+        const breaks = WALLS[wall].broken !== null;
+        if (breaks) this.wallBroken[wall] = true;
+        this.events.push({ type: 'wall-hit', wall, x: b.x, y: b.y, broken: breaks });
         continue;
       }
       const target =

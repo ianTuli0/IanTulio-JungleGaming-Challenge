@@ -50,19 +50,12 @@ body::before {
 h1,
 h2 {
   margin: 0 0 8px;
+  font-size: 32px;
   font-weight: 800;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: #fde7b4;
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.55);
-}
-
-h1 {
-  font-size: clamp(1.6rem, 4vw, 2.3rem);
-}
-
-h2 {
-  font-size: 1.25rem;
 }
 
 p {
@@ -78,8 +71,10 @@ kbd {
   border-radius: 5px;
   background: #2a3a50;
   color: var(--cream);
-  font: 700 0.8rem/1.4 inherit;
   font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
   text-align: center;
 }
 
@@ -116,6 +111,10 @@ kbd {
   color: var(--muted);
 }
 
+p.muted {
+  font-size: 16px;
+}
+
 .small {
   font-size: 0.85rem;
 }
@@ -126,7 +125,7 @@ kbd {
 
 .hint {
   margin: 6px 0 0;
-  font-size: 0.8rem;
+  font-size: 14px;
   color: var(--muted);
 }
 
@@ -144,6 +143,8 @@ kbd {
 .screen {
   min-height: 100%;
   display: grid;
+  /* minmax(0, …): a wide child (a table) never stretches the page past the screen */
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
   padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(64px, env(safe-area-inset-bottom))
     max(16px, env(safe-area-inset-left));
@@ -235,7 +236,7 @@ kbd {
   background: #e9ad45 content-box;
   color: var(--ink);
   font: inherit;
-  font-size: 1.3rem;
+  font-size: 24px;
   font-weight: 800;
   line-height: 1;
   letter-spacing: 0.04em;
@@ -292,7 +293,6 @@ kbd {
 .btn-sm {
   min-width: 150px;
   border-width: 18px 24px;
-  font-size: 0.92rem;
 }
 
 .btn:focus-visible {
@@ -359,6 +359,10 @@ kbd {
 
 /* -- menu ------------------------------------------------------------------------------ */
 
+.menu-panel p.small {
+  font-size: 16px;
+}
+
 .how-to {
   margin-top: 10px;
   padding-top: 10px;
@@ -384,10 +388,41 @@ kbd {
   }
 }
 
+.how-to-btn {
+  display: none;
+}
+
+/* Touch screens and any window too small for the side-by-side menu: "Como jogar" opens in a dialog,
+   so the menu never needs scrolling (sized by the viewport, not only by the pointer type). */
+@media (pointer: coarse), (max-width: 959px), (max-height: 719px) {
+  .menu-panel {
+    display: block;
+    width: min(100%, 540px);
+  }
+
+  .menu-panel .how-to {
+    display: none;
+  }
+
+  .btn.how-to-btn {
+    display: inline-flex;
+  }
+}
+
+dialog.dialog.tutorial-dialog {
+  width: min(calc(100% - 24px), 760px);
+}
+
+.dialog-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
 .controls {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.85rem;
+  font-size: 16px;
   text-align: left;
 }
 
@@ -398,7 +433,7 @@ kbd {
 
 .controls thead th {
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: 14px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -409,6 +444,23 @@ kbd {
 
 .controls tbody th {
   font-weight: 600;
+}
+
+/* Show only the column that applies: touch icons where a touch screen exists, keys unless touch is the primary input. */
+.controls-touch {
+  display: none;
+}
+
+@media (any-pointer: coarse) {
+  .controls-touch {
+    display: table-cell;
+  }
+}
+
+@media (pointer: coarse) {
+  .controls-keys {
+    display: none;
+  }
 }
 
 .touch-icon {
@@ -422,6 +474,47 @@ kbd {
 .touch-icon .icon {
   width: 16px;
   height: 16px;
+}
+
+/* Touch screens: the on-screen buttons in a grid (movement row, cannons row, pause), large as in battle. */
+.touch-legend {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .controls {
+    display: none;
+  }
+
+  .touch-legend {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 6px 16px;
+    margin: 8px 0;
+    padding: 0;
+    list-style: none;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-align: left;
+  }
+
+  .touch-legend li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .touch-legend .touch-icon {
+    width: 50px;
+    height: 50px;
+    flex: none;
+  }
+
+  .touch-legend .touch-icon .icon {
+    width: 26px;
+    height: 26px;
+  }
 }
 
 /* -- options --------------------------------------------------------------------------- */
@@ -455,7 +548,8 @@ kbd {
   font-weight: 800;
 }
 
-input[type='number'] {
+input[type='number'],
+input[type='text'] {
   width: 4.6ch;
   padding: 4px 6px;
   border: 2px solid var(--wood);
@@ -466,6 +560,19 @@ input[type='number'] {
   text-align: center;
   -moz-appearance: textfield;
   appearance: textfield;
+}
+
+input[type='text'] {
+  width: min(100%, 18em);
+  padding: 8px 12px;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+input::placeholder {
+  color: var(--muted);
+  opacity: 0.7;
+  font-weight: 400;
 }
 
 input[type='number']::-webkit-inner-spin-button,
@@ -506,13 +613,14 @@ input[aria-invalid='true'] {
 
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 14px;
   margin: 6px 0 4px;
 }
 
 .tabpanel {
-  overflow-x: auto;
+  min-width: 0;
 }
 
 .log-table {
@@ -587,6 +695,96 @@ input[aria-invalid='true'] {
 
 .reason-destroyed {
   color: var(--error);
+}
+
+/* Narrow screens (phones held upright): each row becomes a two-line card instead of a table wider
+   than the screen. The markup carries explicit table roles, so screen readers still get a table. */
+@media (max-width: 699px) and (min-height: 521px) {
+  .log-table,
+  .log-table tbody {
+    display: grid;
+    gap: 6px;
+  }
+
+  .log-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .log-table tbody tr {
+    display: grid;
+    align-items: center;
+    gap: 2px 10px;
+    padding: 8px 12px;
+    border-radius: 6px;
+  }
+
+  .log-table tbody th,
+  .log-table tbody td {
+    padding: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .log-table .score {
+    grid-area: score;
+    justify-self: end;
+    font-size: 1.25rem;
+  }
+
+  .log-table .score::after {
+    content: ' pts';
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+
+  .ranking-table tbody tr {
+    grid-template: 'rank name score' auto 'rank date score' auto / auto minmax(0, 1fr) auto;
+  }
+
+  .ranking-table .rank {
+    grid-area: rank;
+    font-size: 1.25rem;
+  }
+
+  .ranking-table .name {
+    grid-area: name;
+  }
+
+  .ranking-table .date {
+    grid-area: date;
+    font-size: 0.8rem;
+  }
+
+  .history-table tbody tr {
+    grid-template: 'date date score' auto 'duration reason reason' auto 'player player player' auto / auto auto minmax(0, 1fr);
+  }
+
+  .history-table .date {
+    grid-area: date;
+  }
+
+  .history-table .duration {
+    grid-area: duration;
+  }
+
+  .history-table .reason {
+    grid-area: reason;
+  }
+
+  .history-table .player {
+    grid-area: player;
+    font-size: 0.85rem;
+  }
+
+  .history-table .player.ranked::before {
+    content: 'Ranking: ';
+    color: var(--muted);
+  }
 }
 
 .pager {
@@ -673,13 +871,14 @@ dialog.dialog {
   width: min(calc(100% - 24px), 520px);
   max-height: calc(100dvh - 24px);
   overflow: auto;
-  background: none;
+  /* The panel art's own tone, under it and inside the frame only: the art hides it, but checkers that
+     cannot see border-image otherwise measure the text against whatever sits behind the dialog. */
+  background: #273748 padding-box;
   color: inherit;
 }
 
 dialog.dialog > h2 {
   margin-top: 8px;
-  font-size: clamp(1.5rem, 4vw, 2.1rem);
 }
 
 dialog.dialog::backdrop {
@@ -695,8 +894,13 @@ dialog.dialog::backdrop {
   text-align: center;
 }
 
+dialog.dialog.network-dialog {
+  width: min(calc(100% - 24px), 980px);
+}
+
 .scenarios {
   display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   gap: 6px;
   margin: 8px 0;
   padding: 0;
@@ -893,22 +1097,69 @@ progress {
   color: #ffb0a0;
 }
 
-.touch-controls {
+.touch-controls,
+.stick-zone {
   display: none;
 }
 
+/* Left half, under the HUD and the buttons (it comes first in the DOM). */
+.stick-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 50%;
+}
+
+.stick-base {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border: 3px solid rgba(247, 233, 204, 0.45);
+  border-radius: 50%;
+  background: rgba(247, 233, 204, 0.14);
+  pointer-events: none;
+}
+
+.stick-knob {
+  position: absolute;
+  inset: 0;
+  width: 52px;
+  height: 52px;
+  margin: auto;
+  border-radius: 50%;
+  background: rgba(247, 233, 204, 0.5);
+}
+
+.fullscreen-btn {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .fullscreen-btn {
+    display: inline-grid;
+  }
+}
+
+/* Main menu: bottom-right corner, above the logo (which is hidden on small screens, see below). */
+.menu-fullscreen {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: calc(max(12px, env(safe-area-inset-bottom)) + 66px);
+}
+
 @media (any-pointer: coarse) {
-  .touch-controls {
+  .touch-controls,
+  .stick-zone {
     display: block;
   }
 }
 
 .touch-cluster {
   position: absolute;
-  bottom: max(10px, env(safe-area-inset-bottom));
+  bottom: calc(max(10px, env(safe-area-inset-bottom)) + 60px);
   display: grid;
-  grid-template-columns: repeat(3, var(--touch, 62px));
-  grid-template-rows: repeat(2, calc(var(--touch, 62px) * 0.8));
+  grid-template-columns: repeat(3, var(--touch, 88px));
+  grid-template-rows: repeat(2, calc(var(--touch, 88px) * 0.8));
   gap: 4px 6px;
 }
 
@@ -921,8 +1172,8 @@ progress {
 }
 
 .touch-btn {
-  width: var(--touch, 62px);
-  height: var(--touch, 62px);
+  width: var(--touch, 88px);
+  height: var(--touch, 88px);
   opacity: 0.92;
 }
 
@@ -978,6 +1229,41 @@ progress {
   width: 56px;
 }
 
+/* The big "rotate your phone" message: on the loading screen and in the pause dialog. */
+.rotate-overlay p,
+.pause-dialog.rotate h2 {
+  margin: 0;
+  color: var(--gold);
+  font-size: clamp(1.9rem, 9vw, 2.6rem);
+  font-weight: 900;
+  line-height: 1.1;
+  text-transform: uppercase;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.6);
+}
+
+.rotate-overlay p {
+  max-width: 14em;
+  padding: 0 24px;
+}
+
+.rotate-icon {
+  display: block;
+  width: 72px;
+  margin: 10px auto 4px;
+  animation: rotate-hint 2.4s ease-in-out infinite;
+}
+
+@keyframes rotate-hint {
+  0%,
+  20% {
+    transform: rotate(0);
+  }
+  70%,
+  100% {
+    transform: rotate(-90deg);
+  }
+}
+
 @media (orientation: portrait) and (any-pointer: coarse) {
   .rotate-overlay {
     display: grid;
@@ -1008,13 +1294,11 @@ progress {
   .btn {
     min-width: 180px;
     border-width: 20px 26px;
-    font-size: 1.05rem;
   }
 
   .btn-sm {
     min-width: 128px;
     border-width: 15px 20px;
-    font-size: 0.82rem;
   }
 
   .stack {
@@ -1026,12 +1310,16 @@ progress {
     display: none;
   }
 
-  .pause-dialog {
+  .menu-fullscreen {
+    bottom: max(12px, env(safe-area-inset-bottom));
+  }
+
+  dialog.pause-dialog {
     width: min(calc(100% - 24px), 640px);
   }
 
-  .pause-dialog .stack {
-    grid-template-columns: 1fr 1fr;
+  .pause-dialog .stack > :only-child {
+    grid-column: 1 / -1;
   }
 
   dialog.dialog > h2 {
@@ -1051,9 +1339,367 @@ progress {
     clip: rect(0 0 0 0);
     white-space: nowrap;
   }
+}
 
-  .touch-controls {
-    --touch: 54px;
+/* Short, wide screens (phones on their side, small laptop windows): main actions side by side and a
+   smaller title, so the menu fits the height. */
+@media (max-height: 719px) and (min-width: 520px) {
+  .menu-screen {
+    padding-top: max(10px, env(safe-area-inset-top));
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+
+  .menu-panel {
+    width: min(100%, 780px);
+  }
+
+  .menu-panel .title img {
+    width: min(100%, 220px);
+  }
+
+  .menu-panel .tagline {
+    margin: 2px 0 4px;
+  }
+
+  .menu-panel .stack {
+    grid-auto-flow: column;
+    justify-content: center;
+  }
+
+  .menu-panel .stack .btn {
+    min-width: 140px;
+  }
+
+  .menu-panel .row {
+    margin: 8px 0;
+  }
+
+  .menu-panel p.small {
+    margin: 4px 0;
+  }
+
+  dialog.pause-dialog {
+    width: min(calc(100% - 24px), 720px);
+  }
+
+  .pause-dialog .stack {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Short, wide screens: the tutorial puts the text beside the controls, so it fits without scrolling. */
+@media (max-height: 520px) and (min-width: 520px) {
+  dialog.dialog.tutorial-dialog[open] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    column-gap: 20px;
+    align-items: center;
+  }
+
+  .tutorial-dialog > h2 {
+    grid-column: 1 / -1;
+  }
+
+  .tutorial-dialog > .touch-legend {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    font-size: 14px;
+  }
+
+  .tutorial-dialog > p {
+    text-align: left;
+  }
+}
+
+/* Keyboard table, tighter on short windows so the tutorial dialog fits without scrolling. */
+@media (max-height: 520px) {
+  .controls {
+    font-size: 14px;
+  }
+
+  .controls th,
+  .controls td {
+    padding: 1px 6px;
+  }
+
+  .controls kbd {
+    padding: 0 5px;
+  }
+}
+
+@media (max-height: 380px) {
+  .tagline {
+    display: none;
+  }
+
+  .tutorial-dialog p.small {
+    margin: 4px 0;
+  }
+
+  .touch-legend {
+    gap: 4px 16px;
+    margin: 4px 0;
+  }
+
+  .touch-legend .touch-icon {
+    width: 42px;
+    height: 42px;
+  }
+
+  .touch-legend .touch-icon .icon {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+/* -- compact layouts ---------------------------------------------------------------------------
+   No screen scrolls: these keep the common phone and laptop sizes at full scale, and src/ui/fit.ts
+   shrinks whatever still sticks out of the window. */
+
+/* Phones held upright. */
+@media (max-width: 559px) {
+  h1 {
+    font-size: 1.4rem;
+    margin-bottom: 4px;
+  }
+
+  .tabs {
+    gap: 8px;
+    margin: 2px 0;
+  }
+
+  .tabs .btn {
+    min-width: 0;
+    border-width: 13px 16px;
+    font-size: 0.78rem;
+  }
+
+  .subtitle {
+    margin: 2px 0 4px;
+    font-size: 0.7rem;
+  }
+
+  .refresh {
+    min-height: 0.6em;
+  }
+
+  .state {
+    margin: 16px 0;
+  }
+
+  .pager {
+    margin: 2px 0;
+    gap: 14px;
+  }
+
+  .pager .round-btn {
+    width: 34px;
+    height: 34px;
+  }
+
+  .log-panel .hint {
+    margin: 2px 0;
+    font-size: 0.7rem;
+  }
+
+  .log-table tbody tr {
+    padding: 6px 12px;
+  }
+
+  .ranking-table .rank,
+  .log-table .score {
+    font-size: 1.1rem;
+  }
+
+  .menu-panel .title img {
+    width: min(100%, 250px);
+  }
+
+  .menu-panel .tagline {
+    margin: 2px 0 6px;
+  }
+}
+
+/* Short windows: phones on their side, small laptop screens. */
+@media (max-height: 719px) {
+  .screen {
+    padding-top: max(10px, env(safe-area-inset-top));
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+
+  .log-table tbody th,
+  .log-table tbody td {
+    padding-block: 7px;
+  }
+
+  .field {
+    margin: 8px 0;
+  }
+
+  .status {
+    min-height: 0;
+    margin: 4px 0;
+  }
+}
+
+/* Phones on their side: panels side by side, rows on one line, everything tight. */
+@media (max-height: 520px) {
+  .screen {
+    padding-top: max(6px, env(safe-area-inset-top));
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+  }
+
+  .panel {
+    border-width: 22px 18px;
+  }
+
+  h1 {
+    margin: 0 0 2px;
+    font-size: 1.3rem;
+  }
+
+  p {
+    margin: 3px 0;
+  }
+
+  .btn {
+    min-width: 140px;
+    border-width: 15px 20px;
+    font-size: 1.05rem;
+  }
+
+  .btn-sm {
+    min-width: 0;
+    border-width: 11px 16px;
+    font-size: 0.8rem;
+  }
+
+  .stack {
+    margin: 4px 0 2px;
+  }
+
+  /* Ranking / history: title, tabs and the menu button share the first row. */
+  .log-panel {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0 16px;
+    width: min(100%, 780px);
+  }
+
+  .log-panel > h1 {
+    order: 1;
+    margin: 0;
+  }
+
+  .log-panel > .tabs {
+    order: 2;
+    margin: 0;
+  }
+
+  .log-panel > .stack {
+    order: 3;
+    margin: 0;
+  }
+
+  .log-panel > .tabpanel {
+    order: 4;
+    flex: 1 1 100%;
+  }
+
+  .log-panel .hint {
+    display: none;
+  }
+
+  .subtitle {
+    margin: 2px 0;
+    font-size: 0.68rem;
+  }
+
+  .log-table {
+    border-spacing: 0 3px;
+  }
+
+  .log-table thead th {
+    padding: 0 10px;
+    font-size: 0.6rem;
+  }
+
+  .log-table tbody th,
+  .log-table tbody td {
+    padding: 4px 10px;
+    font-size: 0.88rem;
+  }
+
+  .refresh {
+    min-height: 0;
+  }
+
+  .pager {
+    margin: 2px 0;
+    gap: 14px;
+  }
+
+  .pager .round-btn {
+    width: 30px;
+    height: 30px;
+  }
+
+  /* Options: the two settings side by side. */
+  .options-panel {
+    width: min(100%, 720px);
+  }
+
+  .options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 24px;
+  }
+
+  .options > .checkbox,
+  .options > .status,
+  .options > .stack {
+    grid-column: 1 / -1;
+  }
+
+  .options > .stack {
+    grid-auto-flow: column;
+    justify-content: center;
+    gap: 12px;
+  }
+
+  .field {
+    margin: 4px 0;
+  }
+
+  .field .hint {
+    font-size: 0.72rem;
+  }
+
+  /* Result: score on the left, name and buttons on the right. */
+  .result-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    column-gap: 24px;
+    align-items: center;
+    width: min(100%, 720px);
+  }
+
+  .big-score {
+    font-size: 3rem;
+  }
+
+  .result-actions .field {
+    margin: 4px 0;
+  }
+
+  input[type='text'] {
+    padding: 5px 10px;
+    font-size: 1rem;
+  }
+
+  .menu-panel .tagline {
+    margin: 2px 0;
   }
 }
 

@@ -85,31 +85,31 @@ function RankingTab() {
       <QueryView query={query} label="ranking" empty="No battles recorded with this configuration yet. Be the first!">
         {(data, loadingNext) => (
           <>
-            <table className="log-table">
+            <table className="log-table ranking-table" role="table">
               <caption className="sr-only">
                 Ranking for {config.sessionSeconds} second battles with an enemy every {config.spawnIntervalSeconds} seconds
               </caption>
-              <thead>
-                <tr>
-                  <th scope="col">Rank</th>
-                  <th scope="col">Captain</th>
-                  <th scope="col">Points</th>
-                  <th scope="col">Played</th>
+              <thead role="rowgroup">
+                <tr role="row">
+                  <th scope="col" role="columnheader">Rank</th>
+                  <th scope="col" role="columnheader">Captain</th>
+                  <th scope="col" role="columnheader">Points</th>
+                  <th scope="col" role="columnheader">Played</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody role="rowgroup">
                 {data.items.map((r) => {
                   const mine = r.playerId === player.id;
                   return (
-                    <tr key={r.matchId} className={mine ? 'mine' : undefined}>
-                      <td className="gold">{String(r.rank).padStart(2, '0')}</td>
-                      <th scope="row">
+                    <tr key={r.matchId} role="row" className={mine ? 'mine' : undefined}>
+                      <td role="cell" className="gold rank">{String(r.rank).padStart(2, '0')}</td>
+                      <th scope="row" role="rowheader" className="name">
                         {r.rank === 1 && <Icon name="icon_score" className="icon-inline" />}
                         {r.playerName}
                         {mine && <span className="badge">You</span>}
                       </th>
-                      <td className="gold">{r.score}</td>
-                      <td>
+                      <td role="cell" className="gold score">{r.score}</td>
+                      <td role="cell" className="date">
                         <When iso={r.playedAt} />
                       </td>
                     </tr>
@@ -147,30 +147,32 @@ function HistoryTab() {
   const query = useHistory(page);
   return (
     <>
-      <p className="subtitle">{player.name} · your recent battles</p>
+      <p className="subtitle">Your recent battles</p>
       <PendingList />
       <QueryView query={query} label="match history" empty="No battles recorded yet. Set sail!">
         {(data: Page<MatchRecord>, loadingNext) => (
           <>
-            <table className="log-table">
+            <table className="log-table history-table" role="table">
               <caption className="sr-only">Your match history, newest first</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Date</th>
-                  <th scope="col">Points</th>
-                  <th scope="col">Duration</th>
-                  <th scope="col">Result</th>
+              <thead role="rowgroup">
+                <tr role="row">
+                  <th scope="col" role="columnheader">Date</th>
+                  <th scope="col" role="columnheader">Points</th>
+                  <th scope="col" role="columnheader">Duration</th>
+                  <th scope="col" role="columnheader">Result</th>
+                  <th scope="col" role="columnheader">Ranking</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody role="rowgroup">
                 {data.items.map((r) => (
-                  <tr key={r.matchId}>
-                    <th scope="row">
+                  <tr key={r.matchId} role="row">
+                    <th scope="row" role="rowheader" className="date">
                       <When iso={r.playedAt} />
                     </th>
-                    <td className="gold">{r.score}</td>
-                    <td>{formatClock(r.durationMs / 1000)}</td>
-                    <td className={`reason reason-${r.endReason}`}>{endReasonLabel(r.endReason)}</td>
+                    <td role="cell" className="gold score">{r.score}</td>
+                    <td role="cell" className="duration">{formatClock(r.durationMs / 1000)}</td>
+                    <td role="cell" className={`reason reason-${r.endReason}`}>{endReasonLabel(r.endReason)}</td>
+                    <td role="cell" className={r.ranked ? 'player ranked' : 'player'}>{r.ranked ? r.playerName : <span className="muted">Not ranked</span>}</td>
                   </tr>
                 ))}
               </tbody>

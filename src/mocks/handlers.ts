@@ -86,7 +86,7 @@ export const handlers = [
         ? []
         : db
             .all()
-            .filter((r) => r.config.sessionSeconds === session && r.config.spawnIntervalSeconds === spawn)
+            .filter((r) => r.ranked && r.config.sessionSeconds === session && r.config.spawnIntervalSeconds === spawn)
             .sort(compareRanking)
             .map((r, i) => ({ ...r, rank: i + 1 }));
     return HttpResponse.json(paginate(rows, params));

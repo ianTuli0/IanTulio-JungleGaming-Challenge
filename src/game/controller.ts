@@ -1,6 +1,7 @@
 // Owns one match: Pixi app + ticker, fixed-step simulation, input, audio and the HUD store.
 import { Application, type Ticker } from 'pixi.js';
 import { createStore, type Store } from '../store.ts';
+import { ARENA_HEIGHT, ARENA_WIDTH, arenaBounds, type Bounds } from './arena.ts';
 import type { GameAssets } from './assets.ts';
 import { audio } from './audio.ts';
 import { createMatchConfig, type EndReason, type MatchSettings } from './config.ts';
@@ -36,16 +37,24 @@ export interface MatchOutcome {
   seed: number;
 }
 
-/** Read-only state snapshot, exposed as `window.__pirateBattle` only with `?debug` or `?perf`. */
+/**
+ * Test hook, exposed as `window.__pirateBattle` only with `?debug` or `?perf`: a read-only state snapshot and
+ * a clock control. `advance` feeds the real simulation (rules, collisions, held input) whole fixed steps
+ * without drawing between them, so E2E tests can play minutes of battle in milliseconds.
+ */
 export interface DebugHandle {
+  advance(seconds: number): void;
   state(): {
     status: string;
     paused: boolean;
     elapsed: number;
     score: number;
     player: { x: number; y: number; angle: number; hp: number };
-    enemies: { kind: string; x: number; y: number; angle: number; hp: number }[];
+    enemies: { id: number; kind: string; x: number; y: number; angle: number; hp: number }[];
     projectiles: number;
+    /** Current island colliders (peripheral islands move during the match). */
+    islands: { cx: number; cy: number; hw: number; hh: number; r: number }[];
+    bounds: Bounds;
   };
 }
 
@@ -84,8 +93,10 @@ export class GameController {
 
   constructor(opts: ControllerOptions) {
     this.opts = opts;
-    // Snapshot: later changes to Options only affect the next match.
-    this.sim = new Simulation(createMatchConfig(opts.settings), opts.seed);
+    // Snapshot: later changes to Options only affect the next match. The sea is sized to the screen
+    // the match starts on, so the arena fills it edge to edge.
+    const { clientWidth: w, clientHeight: h } = opts.host;
+    this.sim = new Simulation(createMatchConfig(opts.settings), opts.seed, arenaBounds(w && h ? w / h : ARENA_WIDTH / ARENA_HEIGHT));
     this.input = new InputController(() => this.pause('manual'));
     this.hud = createStore<HudState>(this.snapshot());
   }
@@ -108,7 +119,7 @@ export class GameController {
     this.app = app;
     app.canvas.setAttribute('aria-hidden', 'true');
     this.opts.host.appendChild(app.canvas);
-    this.view = new GameRenderer(this.opts.assets, this.opts.debug);
+    this.view = new GameRenderer(this.opts.assets, this.sim, this.opts.debug);
     app.stage.addChild(this.view.world);
     this.layout();
     app.renderer.on('resize', this.layout);
@@ -189,13 +200,7 @@ export class GameController {
     const running = !this.paused && sim.status === 'running';
     if (running) {
       this.acc += dt;
-      while (this.acc >= STEP && sim.status === 'running') {
-        sim.step(STEP, this.input.state);
-        this.acc -= STEP;
-        const events = sim.drainEvents();
-        view.handle(events);
-        this.react(events);
-      }
+      this.drain(view);
       this.perf?.record(ticker.deltaMS, 1 + sim.enemies.length + sim.projectiles.length, view.effectCount);
     }
     // Effects keep animating after the end, but freeze with the simulation while paused.
@@ -204,6 +209,18 @@ export class GameController {
     audio.setLoop('ship_sailing_loop', sailing);
     this.hud.set(this.snapshot());
   };
+
+  /** Runs the whole fixed steps waiting in the accumulator (shared by the ticker and the `?debug` time hook). */
+  private drain(view: GameRenderer): void {
+    const sim = this.sim;
+    while (this.acc >= STEP && sim.status === 'running') {
+      sim.step(STEP, this.input.state);
+      this.acc -= STEP;
+      const events = sim.drainEvents();
+      view.handle(events);
+      this.react(events);
+    }
+  }
 
   /** Sounds, warnings and the end-of-match hand-off. */
   private react(events: SimEvent[]): void {
@@ -225,8 +242,9 @@ export class GameController {
         case 'splash':
           audio.play(audio.variant('cannonball_water_hit', 2), 0.2);
           break;
-        case 'obstacle-hit':
-          audio.play('ship_wood_hit_2', 0.25, 0.7);
+        case 'wall-hit':
+          // stone crumbling vs. a dull thud on a tower
+          audio.play(e.broken ? 'ship_collision' : 'ship_wood_hit_2', e.broken ? 0.45 : 0.3, e.broken ? 0.8 : 0.6);
           break;
         case 'destroyed':
           audio.play(e.cause === 'ram' ? 'ship_collision' : audio.variant('ship_explosion', 2), 0.75);
@@ -234,6 +252,10 @@ export class GameController {
           break;
         case 'score':
           audio.play('score_point', 0.5);
+          break;
+        case 'island-moved':
+          audio.play('cannonball_water_hit_1', 0.5, 0.5);
+          if (e.island === 0) this.announce('The edge islands sank and resurfaced elsewhere.');
           break;
         case 'ended':
           this.finish(e.reason);
@@ -301,9 +323,15 @@ export class GameController {
   };
 
   private readonly debugHandle: DebugHandle = {
+    advance: (seconds) => {
+      if (this.paused || this.sim.status !== 'running' || !this.view) return;
+      this.acc += seconds + 1e-9; // float dust must not cost a step
+      this.drain(this.view);
+      this.hud.set(this.snapshot());
+    },
     state: () => {
       const s = this.sim;
-      const pose = ({ kind, x, y, angle, hp }: { kind: string; x: number; y: number; angle: number; hp: number }) => ({ kind, x, y, angle, hp });
+      const pose = ({ id, kind, x, y, angle, hp }: { id: number; kind: string; x: number; y: number; angle: number; hp: number }) => ({ id, kind, x, y, angle, hp });
       return {
         status: s.status,
         paused: this.paused,
@@ -312,6 +340,8 @@ export class GameController {
         player: pose(s.player),
         enemies: s.enemies.map(pose),
         projectiles: s.projectiles.length,
+        islands: s.colliders,
+        bounds: s.bounds,
       };
     },
   };

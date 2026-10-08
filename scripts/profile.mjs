@@ -11,7 +11,7 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ARENA_HEIGHT, ARENA_WIDTH, ISLAND_COLLIDERS, ROCKS } from '../src/game/arena.ts';
+import { ARENA_HEIGHT, ARENA_WIDTH } from '../src/game/arena.ts';
 
 const BASE = process.env.BASE ?? 'http://localhost:4173/';
 const CHROME = process.env.CHROME_PATH ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
@@ -77,7 +77,9 @@ const click = async (text) => {
 const key = (code, type) => send('Input.dispatchKeyEvent', { type, code, key: code, windowsVirtualKeyCode: code === 'Escape' ? 27 : 0 });
 
 // -- in-page bot: frame-accurate, plays with keyboard events on window ---------------------
-const pageBot = (islands, rocks, W, H) => {
+const pageBot = (W, H) => {
+  let islands = []; // read from the game every frame: peripheral islands move
+  let b = { x0: 0, y0: 0, x1: W, y1: H }; // the arena is sized to the screen
   const sdf = (x, y) => {
     let d = Infinity;
     for (const o of islands) {
@@ -85,7 +87,6 @@ const pageBot = (islands, rocks, W, H) => {
       const qy = Math.abs(y - o.cy) - o.hh + o.r;
       d = Math.min(d, Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - o.r);
     }
-    for (const r of rocks) d = Math.min(d, Math.hypot(x - r.x, y - r.y) - r.radius);
     return d;
   };
   const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -94,7 +95,7 @@ const pageBot = (islands, rocks, W, H) => {
     for (const d of [35, 70, 110, 150]) {
       const px = x + Math.cos(h) * d;
       const py = y + Math.sin(h) * d;
-      c = Math.min(c, sdf(px, py), px, py, W - px, H - py);
+      c = Math.min(c, sdf(px, py), px - b.x0, py - b.y0, b.x1 - px, b.y1 - py);
     }
     return c;
   };
@@ -143,6 +144,8 @@ const pageBot = (islands, rocks, W, H) => {
     if (!handle) return seen ? undefined : requestAnimationFrame(frame); // match left: stop
     seen = true;
     const s = handle.state();
+    islands = s.islands;
+    b = s.bounds;
     if (s.status !== 'running') return [...held].forEach((c) => hold(c, false));
     if (s.paused) held.clear(); // the game drops held keys on pause
     else {
@@ -157,11 +160,12 @@ const pageBot = (islands, rocks, W, H) => {
 async function startMatch() {
   for (let i = 0; i < 40; i++) {
     if (await evaluate('!!window.__pirateBattle')) {
-      await evaluate(`(${pageBot})(${JSON.stringify(ISLAND_COLLIDERS)}, ${JSON.stringify(ROCKS)}, ${ARENA_WIDTH}, ${ARENA_HEIGHT})`);
+      await evaluate(`(${pageBot})(${ARENA_WIDTH}, ${ARENA_HEIGHT})`);
       return;
     }
     const hash = await evaluate('location.hash');
-    if (hash !== '#/play') await click(hash === '#/result' ? 'Play Again' : 'Play');
+    if (hash === '#/result') await click('Continuar'); // skip the optional ranking name
+    if (hash !== '#/play') await click(hash === '#/result' ? 'Jogar Novamente' : 'Jogar');
     await sleep(500);
   }
   throw new Error('the match did not start');
@@ -236,7 +240,7 @@ try {
       await key('Escape', 'keyDown');
       await key('Escape', 'keyUp');
       await sleep(500);
-      await click('Main Menu');
+      await click('Menu Principal');
       await sleep(1000);
       await heapSample(`after cycle ${cycle} (${Math.round(s?.elapsed ?? 0)} s played, ${s?.enemies.length ?? 0} enemies alive)`);
     }

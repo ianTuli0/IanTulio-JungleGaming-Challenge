@@ -3,10 +3,13 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';
 import { queryClient } from './api/queries.ts';
+import { lastResultStore } from './settings.ts';
 import './styles.css';
 
-// A match never survives a reload: land on the menu instead of a half-started battle.
-if (window.location.hash.startsWith('#/play')) window.history.replaceState(null, '', '#/');
+// A match never survives a reload: land on the menu instead of a half-started battle, or on the
+// result screen when the last battle still waits for its ranking-name answer.
+if (lastResultStore.get()?.confirmed === false) window.history.replaceState(null, '', '#/result');
+else if (window.location.hash.startsWith('#/play')) window.history.replaceState(null, '', '#/');
 
 const mocksEnabled = import.meta.env.VITE_ENABLE_MOCKS !== 'false';
 

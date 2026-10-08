@@ -1,6 +1,17 @@
 // Pixi view of the simulation. Reads state, never changes rules.
-import { Container, Graphics, Rectangle, Sprite, Texture, TilingSprite } from 'pixi.js';
-import { ARENA_HEIGHT, ARENA_WIDTH, ISLANDS, ISLAND_BLOCKS, ISLAND_COLLIDERS, ROCKS, SHALLOW_ORIGIN, TILE } from './arena.ts';
+import { Container, Graphics, NineSliceSprite, Rectangle, Sprite, Texture, TilingSprite } from 'pixi.js';
+import {
+  CENTRAL,
+  CENTRAL_DECOR,
+  PERIPHERALS,
+  SAND_CENTRE,
+  SAND_ORIGIN,
+  SHALLOW_ORIGIN,
+  TILE,
+  WALLS,
+  type Blob,
+  type Decor,
+} from './arena.ts';
 import type { GameAssets } from './assets.ts';
 import type { ShipKind } from './config.ts';
 import type { Ship, SimEvent, Simulation } from './simulation.ts';
@@ -11,12 +22,12 @@ const BAR_SCALE = 0.4;
 /** Ship sprites are 113 px long; bars float just above the hull at any heading. */
 const barOffset = (spriteScale: number) => spriteScale * 62;
 
-/** Frame of cell (i, j) in a w x h area drawn with the 3x3 block at `origin` (16-wide sheet). */
-const nineSlice = (origin: number, i: number, j: number, w: number, h: number) =>
-  origin + (j === 0 ? 0 : j === h - 1 ? 2 : 1) * 16 + (i === 0 ? 0 : i === w - 1 ? 2 : 1);
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const lerpAngle = (a: number, b: number, t: number) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * t;
 const damageLevel = (hp: number, max: number) => (hp <= 0 ? 3 : hp / max > 2 / 3 ? 0 : hp / max > 1 / 3 ? 1 : 2);
+/** White to deep-water blue as k goes 0 → 1: things fading into the sea. */
+const sinkTint = (k: number) => (Math.round(255 - 185 * k) << 16) | (Math.round(255 - 115 * k) << 8) | Math.round(255 - 85 * k);
+const STONE = 0xb4bcc6;
 
 interface ShipView {
   sail: number;
@@ -40,6 +51,8 @@ interface Effect {
 
 export class GameRenderer {
   readonly world = new Container();
+  /** Sinking hulls, wreckage and sailors: below the ships that may sail over them. */
+  private readonly floatLayer = new Container();
   private readonly shipLayer = new Container();
   private readonly ballLayer = new Container();
   private readonly trails = new Graphics();
@@ -52,18 +65,39 @@ export class GameRenderer {
   private time = 0;
   private readonly reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   private readonly assets: GameAssets;
+  private readonly sim: Simulation;
+  private readonly wallSprites: Sprite[];
+  /** One container per peripheral island (shallows, sand, props), moved when the island resurfaces. */
+  private readonly peripherals: Container[] = [];
+  private readonly colliderOverlay: Graphics | null = null;
+  /** Whole-block textures cut from the tile atlas (freed on destroy; the atlas itself stays cached). */
+  private readonly blocks: Texture[] = [];
 
-  constructor(assets: GameAssets, debug = false) {
+  constructor(assets: GameAssets, sim: Simulation, debug = false) {
     this.assets = assets;
-    this.world.addChild(this.buildMap(), this.trails, this.shipLayer, this.ballLayer, this.effectLayer, this.barLayer);
-    if (debug) this.world.addChild(this.buildColliderOverlay());
+    this.sim = sim;
+    this.wallSprites = WALLS.map((w) => {
+      const s = new Sprite(this.tile(w.frame));
+      s.position.set(w.x, w.y);
+      return s;
+    });
+    this.world.addChild(this.buildMap(), ...this.wallSprites, this.trails, this.floatLayer, this.shipLayer, this.ballLayer, this.effectLayer, this.barLayer);
+    if (debug) {
+      this.colliderOverlay = new Graphics();
+      this.world.addChild(this.colliderOverlay);
+      this.drawColliders();
+    }
   }
 
-  /** Fits the arena inside the canvas, preserving its aspect ratio (letterboxed). */
+  /**
+   * Fits the match bounds inside the canvas. They are sized to the screen when the match starts, so
+   * this only leaves a margin (of more sea) if the window changes shape mid-match.
+   */
   layout(width: number, height: number): void {
-    const scale = Math.min(width / ARENA_WIDTH, height / ARENA_HEIGHT);
+    const { x0, y0, x1, y1 } = this.sim.bounds;
+    const scale = Math.min(width / (x1 - x0), height / (y1 - y0));
     this.world.scale.set(scale);
-    this.world.position.set((width - ARENA_WIDTH * scale) / 2, (height - ARENA_HEIGHT * scale) / 2);
+    this.world.position.set((width - (x1 - x0) * scale) / 2 - x0 * scale, (height - (y1 - y0) * scale) / 2 - y0 * scale);
   }
 
   private tile(frame: number): Texture {
@@ -76,33 +110,84 @@ export class GameRenderer {
 
   private buildMap(): Container {
     const map = new Container();
-    map.addChild(new TilingSprite({ texture: this.assets.water, width: ARENA_WIDTH, height: ARENA_HEIGHT }));
-    const put = (frame: number, x: number, y: number, centred = false) => {
-      const s = new Sprite(this.tile(frame));
-      if (centred) s.anchor.set(0.5);
-      s.position.set(x, y);
-      map.addChild(s);
-    };
-    for (const isl of ISLANDS) {
-      const size = ISLAND_BLOCKS[isl.style].size + 2;
-      for (let j = 0; j < size; j++) {
-        for (let i = 0; i < size; i++) put(nineSlice(SHALLOW_ORIGIN, i, j, size, size), (isl.col - 1 + i) * TILE, (isl.row - 1 + j) * TILE);
-      }
-    }
-    for (const isl of ISLANDS) {
-      const { origin, size } = ISLAND_BLOCKS[isl.style];
-      for (let j = 0; j < size; j++) for (let i = 0; i < size; i++) put(origin + i + j * 16, (isl.col + i) * TILE, (isl.row + j) * TILE);
-      for (const d of isl.decor) put(d.frame, (isl.col + d.dx) * TILE, (isl.row + d.dy) * TILE, true);
-    }
-    for (const r of ROCKS) put(r.frame, r.x, r.y, true);
+    const { x0, y0, x1, y1 } = this.sim.bounds;
+    const sea = 2048; // water well past the bounds: no bars if the window changes shape mid-match
+    map.addChild(new TilingSprite({ texture: this.assets.water, x: x0 - sea, y: y0 - sea, width: x1 - x0 + 2 * sea, height: y1 - y0 + 2 * sea, tileScale: { x: 0.5, y: 0.5 } }));
+    map.addChild(this.island(CENTRAL, CENTRAL_DECOR));
+    PERIPHERALS.forEach((p, i) => {
+      const node = this.island([{ x: 0, y: 0, w: p.w, h: p.h }], p.decor);
+      const { x, y } = this.sim.peripheral(i);
+      node.position.set(x, y);
+      this.peripherals.push(node);
+      map.addChild(node);
+    });
     return map;
   }
 
-  private buildColliderOverlay(): Graphics {
-    const g = new Graphics();
-    for (const c of ISLAND_COLLIDERS) g.roundRect(c.cx - c.hw, c.cy - c.hh, c.hw * 2, c.hh * 2, c.r);
-    for (const r of ROCKS) g.circle(r.x, r.y, r.radius);
-    return g.fill({ color: 0xff0044, alpha: 0.3 });
+  /**
+   * Each blob is one sprite of the whole sand block (no seams between its tiles) over a nine-slice of
+   * the translucent shallow-water block. Where blobs overlap, the plain centre tile is stretched over
+   * their insides so no shoreline shows in the middle of the island.
+   */
+  private island(blobs: Blob[], decor: Decor[]): Container {
+    const node = new Container();
+    const halo = this.block(SHALLOW_ORIGIN, 3);
+    const sand = this.block(SAND_ORIGIN, 3);
+    const size = 3 * TILE;
+    // Overlapping halos are merged with 'max' in their own cached layer, so the translucent
+    // shallows do not stack up into brighter patches where blobs meet.
+    const shallows = new Container();
+    for (const b of blobs) {
+      const k = Math.min(b.w, b.h) / size;
+      const m = TILE * k;
+      const shallow = new NineSliceSprite({ texture: halo, leftWidth: TILE, topHeight: TILE, rightWidth: TILE, bottomHeight: TILE, width: (b.w + 2 * m) / k, height: (b.h + 2 * m) / k });
+      shallow.position.set(b.x - m, b.y - m);
+      shallow.scale.set(k);
+      if (blobs.length > 1) shallow.blendMode = 'max';
+      shallows.addChild(shallow);
+    }
+    if (blobs.length > 1) shallows.cacheAsTexture(true);
+    node.addChild(shallows);
+    const rect = (texture: Texture, x: number, y: number, w: number, h: number) => {
+      const s = new Sprite(texture);
+      s.position.set(x, y);
+      s.setSize(w, h);
+      node.addChild(s);
+    };
+    for (const b of blobs) rect(sand, b.x, b.y, b.w, b.h);
+    if (blobs.length > 1) {
+      for (const b of blobs) {
+        const ix = (40 * b.w) / size;
+        const iy = (40 * b.h) / size;
+        rect(this.tile(SAND_CENTRE), b.x + ix, b.y + iy, b.w - 2 * ix, b.h - 2 * iy);
+      }
+    }
+    for (const d of decor) {
+      const s = new Sprite(d.tile === undefined ? this.ship(d.ship ?? '') : this.tile(d.tile));
+      s.anchor.set(0.5);
+      s.position.set(d.x, d.y);
+      s.scale.set(d.scale ?? 1);
+      s.rotation = d.rot ?? 0;
+      node.addChild(s);
+    }
+    return node;
+  }
+
+  /** Texture covering a size x size block of the tile sheet starting at tile `origin`. */
+  private block(origin: number, size: number): Texture {
+    const t = this.tile(origin);
+    const texture = new Texture({ source: t.source, frame: new Rectangle(t.frame.x, t.frame.y, size * TILE, size * TILE) });
+    this.blocks.push(texture);
+    return texture;
+  }
+
+  private drawColliders(): void {
+    const g = this.colliderOverlay;
+    if (!g) return;
+    g.clear();
+    for (const c of this.sim.colliders) g.roundRect(c.cx - c.hw, c.cy - c.hh, c.hw * 2, c.hh * 2, c.r);
+    for (const w of WALLS) g.rect(w.x0, w.y0, w.x1 - w.x0, w.y1 - w.y0);
+    g.fill({ color: 0xff0044, alpha: 0.3 });
   }
 
   // -- per-frame sync -----------------------------------------------------------
@@ -214,8 +299,7 @@ export class GameRenderer {
     }
     v.hull.tint = 0xffffff;
     v.hull.texture = this.ship(`ship_${18 + v.sail + 1}`);
-    this.shipLayer.removeChild(v.body);
-    this.effectLayer.addChildAt(v.body, 0);
+    this.floatLayer.addChild(v.body);
     const start = v.body.scale.x;
     this.addEffect(v.body, 2.2, (k) => {
       v.body.scale.set(start * (1 - 0.25 * k));
@@ -296,9 +380,10 @@ export class GameRenderer {
     });
   }
 
-  private debris(x: number, y: number, count: number): void {
+  private debris(x: number, y: number, count: number, tint = 0xffffff): void {
     for (let i = 0; i < count; i++) {
       const s = this.sprite(`wood_${1 + Math.floor(Math.random() * 4)}`, x, y, 0.7);
+      s.tint = tint;
       const a = Math.random() * Math.PI * 2;
       const v = 40 + Math.random() * 70;
       const spin = (Math.random() - 0.5) * 8;
@@ -307,6 +392,56 @@ export class GameRenderer {
         s.y += Math.sin(a) * v * dt * (1 - k);
         s.rotation += spin * dt;
         s.alpha = 1 - k;
+      });
+    }
+  }
+
+  /** Planks, the crow's nest and a cannon drift apart and slowly go under. */
+  private wreckage(x: number, y: number): void {
+    for (const frame of ['wood_1', 'wood_2', 'wood_3', 'wood_4', 'wood_2', 'nest', 'cannon_loose']) {
+      if (Math.random() < 0.25) continue;
+      const a = Math.random() * Math.PI * 2;
+      const s = this.sprite(frame, x + Math.cos(a) * 10, y + Math.sin(a) * 10, 0.85);
+      s.rotation = Math.random() * Math.PI * 2;
+      const speed = 12 + Math.random() * 22;
+      const spin = (Math.random() - 0.5) * 1.2;
+      this.floatLayer.addChild(s);
+      this.addEffect(s, 4 + Math.random() * 2.5, (k, dt) => {
+        const nx = s.x + Math.cos(a) * speed * dt * (1 - k);
+        const ny = s.y + Math.sin(a) * speed * dt * (1 - k);
+        if (this.sim.obstacleDistance(nx, ny) > 4) s.position.set(nx, ny); // washes up at the shore, never drifts onto sand
+        s.rotation += spin * dt * (1 - k);
+        s.scale.set(0.85 * (1 - 0.3 * k));
+        s.tint = sinkTint(k);
+        s.alpha = k < 0.45 ? 1 : 1 - (k - 0.45) / 0.55;
+      });
+    }
+  }
+
+  /** 1–2 sailors fall overboard and go under; the ripple ring around each closes as they sink. */
+  private sailors(x: number, y: number): void {
+    for (let i = 1 + Math.floor(Math.random() * 2); i > 0; i--) {
+      // just outside the explosion, in the water (a few tries near the shore, else at the wreck)
+      const d = 40 + Math.random() * 18;
+      const spot = Array.from({ length: 6 }, () => Math.random() * Math.PI * 2)
+        .map((a) => ({ x: x + Math.cos(a) * d, y: y + Math.sin(a) * d }))
+        .find((p) => this.sim.obstacleDistance(p.x, p.y) > 10) ?? { x, y };
+      const node = new Container();
+      node.position.set(spot.x, spot.y);
+      const ring = new Graphics().circle(0, 0, 10).stroke({ width: 2, color: 0xffffff });
+      const body = this.sprite(`crew_${1 + Math.floor(Math.random() * 6)}`, 0, 0, 1.1);
+      body.rotation = Math.random() * Math.PI * 2;
+      const spin = (Math.random() - 0.5) * 1.5;
+      node.addChild(ring, body);
+      this.floatLayer.addChild(node);
+      this.addEffect(node, 3.2, (k, dt) => {
+        body.rotation += spin * dt;
+        body.scale.set(1.1 * (1 - 0.55 * k));
+        body.tint = sinkTint(k);
+        body.alpha = k < 0.4 ? 1 : 1 - (k - 0.4) / 0.6;
+        const open = Math.max(0, 1 - k / 0.75); // the ring closes faster than the body fades
+        ring.scale.set(0.6 + 1.6 * open);
+        ring.alpha = 0.9 * open;
       });
     }
   }
@@ -345,15 +480,33 @@ export class GameRenderer {
         case 'splash':
           this.ring(e.x, e.y, 3, 16, 0.5, 2);
           break;
-        case 'obstacle-hit':
-          this.debris(e.x, e.y, 2);
-          this.ring(e.x, e.y, 2, 10, 0.35, 2);
+        case 'wall-hit': {
+          this.explosion(e.x, e.y, 0.4);
+          this.debris(e.x, e.y, e.broken ? 5 : 2, STONE);
+          this.ring(e.x, e.y, 4, e.broken ? 30 : 12, 0.5, 2);
+          const broken = WALLS[e.wall].broken;
+          if (e.broken && broken !== null) this.wallSprites[e.wall].texture = this.tile(broken);
           break;
+        }
+        case 'island-moved': {
+          // goes under in a swirl of foam and rises at its new spot
+          const node = this.peripherals[e.island];
+          const { w, h } = PERIPHERALS[e.island];
+          this.ring(node.x + w / 2, node.y + h / 2, 30, w * 0.8, 1, 4);
+          node.position.set(e.x, e.y);
+          this.ring(e.x + w / 2, e.y + h / 2, w * 0.8, 30, 1, 4);
+          this.addEffect(new Container(), 1, (k) => {
+            node.alpha = k;
+          });
+          this.drawColliders();
+          break;
+        }
         case 'destroyed': {
           const v = this.ships.get(e.shipId);
           if (v) this.removeShip(e.shipId, v, true);
           this.explosion(e.x, e.y, e.cause === 'ram' ? 1.2 : 1);
-          this.debris(e.x, e.y, 8);
+          this.wreckage(e.x, e.y);
+          this.sailors(e.x, e.y);
           this.ring(e.x, e.y, 10, 46, 0.8, 3);
           if (e.kind === 'player' && !this.reducedMotion) this.shake = 0.5;
           break;
@@ -370,6 +523,7 @@ export class GameRenderer {
 
   destroy(): void {
     for (const v of this.ships.values()) v.fill.destroy(false);
+    for (const t of this.blocks) t.destroy(false);
     this.ships.clear();
     this.effects = [];
     this.world.destroy({ children: true });
