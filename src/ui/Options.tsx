@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent } from 'react';
-import { GAME_CONFIG } from '../game/config.ts';
-import { saveSettings, settingsStore, validateSettings, type SettingsErrors } from '../settings.ts';
+import { GAME_CONFIG, validateSettings, type SettingsErrors } from '../game/config.ts';
+import { saveSettings, settingsStore } from '../settings.ts';
 import { useStore } from '../store.ts';
 import { Button, Panel, RoundButton, focusOnMount } from './kit.tsx';
 import { navigate } from './router.ts';

@@ -482,7 +482,12 @@ export class Simulation {
 
   private updateSpawner(dt: number): void {
     this.spawnTimer -= dt;
-    if (this.spawnTimer > 0 || this.enemies.length >= this.config.spawn.maxAlive) return;
+    if (this.enemies.length >= this.config.spawn.maxAlive) {
+      // Deferred, not banked: time spent at the cap must not turn into a burst of replacements.
+      this.spawnTimer = Math.max(0, this.spawnTimer);
+      return;
+    }
+    if (this.spawnTimer > 0) return;
     if (this.spawnEnemy()) this.spawnTimer += this.config.spawnIntervalSeconds;
   }
 

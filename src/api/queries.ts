@@ -124,13 +124,21 @@ export function useSubmissionState(matchId: string): SubmissionState {
   return { status: 'queued' };
 }
 
+/** The server refused this record for good (a 4xx that retrying cannot fix): only "Retry now" or a reload tries again. */
+const wasRejected = (matchId: string) =>
+  queryClient
+    .getMutationCache()
+    .findAll({ mutationKey: SUBMIT_KEY, predicate: isFor(matchId) })
+    .some((m) => m.state.status === 'error' && !isRetryable(m.state.error));
+
 /** Mounted once: submits new records, recovers the ones left from a previous session, retries periodically. */
 export function usePendingSync(): void {
   const pending = useStore(pendingStore);
   const { mutate } = useSubmitMatch();
   const sync = useEffectEvent(() => {
     for (const record of pendingStore.get()) {
-      if (!queryClient.isMutating({ mutationKey: SUBMIT_KEY, predicate: isFor(record.matchId) })) mutate(record);
+      if (queryClient.isMutating({ mutationKey: SUBMIT_KEY, predicate: isFor(record.matchId) }) || wasRejected(record.matchId)) continue;
+      mutate(record);
     }
   });
   useEffect(() => sync(), [pending]);

@@ -1,6 +1,7 @@
 // Web Audio playback for the WAVs in assets/sounds. Sound is optional:
 // any load/decode failure just leaves that sound silent.
-const files = import.meta.glob('../../assets/sounds/*.wav', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+// ui_back, ui_close and ui_hover ship with the pack but nothing plays them: skip their download and decoding.
+const files = import.meta.glob(['../../assets/sounds/*.wav', '!../../assets/sounds/ui_{back,close,hover}.wav'], { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 const URLS = new Map(Object.entries(files).map(([path, url]) => [path.slice(path.lastIndexOf('/') + 1, -4), url]));
 
 class AudioManager {

@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc -b",
-    "test:unit": "node --experimental-strip-types --no-warnings src/game/simulation.check.ts",
+    "test:unit": "node --experimental-strip-types --no-warnings --test src/game/simulation.check.ts",
     "profile": "node --experimental-strip-types --no-warnings scripts/profile.mjs",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report",

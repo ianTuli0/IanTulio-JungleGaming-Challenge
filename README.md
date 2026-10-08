@@ -15,7 +15,6 @@ Built with **React 19**, **TypeScript (strict)**, **PixiJS 8**, **TanStack Query
   persistence, ranking and history integration, balancing decisions and limitations.
 - [PERFORMANCE.md](PERFORMANCE.md): profiling method and results.
 - [CREDITS.md](CREDITS.md): asset sources and licenses.
-- [CHALLENGE.md](CHALLENGE.md): the original challenge statement (Portuguese).
 
 ## Quick start
 
@@ -244,7 +243,8 @@ Set **Game session time** to 60 s in Options to finish matches quickly.
 
 ## Deployment
 
-Any static host works. The app uses hash routes, so no rewrite rules are needed.
+Any static host works, at the domain root or under a sub-path (the build uses relative URLs). The app uses
+hash routes, so no rewrite rules are needed.
 
 | Setting (Vercel) | Value |
 | --- | --- |

@@ -124,7 +124,7 @@ test.describe('touch controls', () => {
     }
   });
 
-  test('the sailing stick ring is centred on the left buttons and covers all three', async ({ page }) => {
+  test('the sailing stick ring hugs the left buttons: covers all three, no bigger than needed, inside the screen', async ({ page }) => {
     const start = await startMatch(page);
     const box = (await page.locator('.touch-cluster.left').boundingBox())!;
     const [x, y] = [box.x + 20, box.y + 20]; // the empty top-left corner of the cluster
@@ -134,12 +134,17 @@ test.describe('touch controls', () => {
     const base = (await page.locator('.stick-base').boundingBox())!;
     const [cx, cy, radius] = [base.x + base.width / 2, base.y + base.height / 2, base.width / 2];
     expect(cx, 'ring centre x = cluster centre x').toBeCloseTo(box.x + box.width / 2, 0);
-    expect(cy, 'ring centre y = cluster centre y').toBeCloseTo(box.y + box.height / 2, 0);
+    let tightest = Infinity;
     for (const name of ['Sail forward', 'Turn left', 'Turn right']) {
       const b = (await page.getByRole('button', { name }).boundingBox())!;
       const reach = Math.hypot(b.x + b.width / 2 - cx, b.y + b.height / 2 - cy) + b.width / 2;
       expect(reach, `the ring covers "${name}"`).toBeLessThanOrEqual(radius);
+      tightest = Math.min(tightest, radius - reach);
     }
+    expect(tightest, 'the ring wraps the buttons: its tightest point is within 10px of one').toBeLessThan(10);
+    const view = page.viewportSize()!;
+    expect(base.x, 'ring inside the screen (left)').toBeGreaterThanOrEqual(0);
+    expect(base.y + base.height, 'ring inside the screen (bottom)').toBeLessThanOrEqual(view.height);
 
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y - 50, id: 1 }] });
     await waitFor(page, 'the knob to follow the finger', async () => ((await page.locator('.stick-knob').getAttribute('style')) ?? '').includes('-50px'));

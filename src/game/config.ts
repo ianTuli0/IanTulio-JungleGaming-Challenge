@@ -116,6 +116,24 @@ export interface MatchSettings {
   spawnIntervalSeconds: number;
 }
 
+export type SettingsErrors = Partial<Record<keyof MatchSettings, string>>;
+
+/** Messages for options outside the allowed ranges (empty = valid). Used by the Options form and by record validation. */
+export function validateSettings(s: MatchSettings): SettingsErrors {
+  const { session, spawn } = GAME_CONFIG;
+  const errors: SettingsErrors = {};
+  if (!Number.isInteger(s.sessionSeconds)) errors.sessionSeconds = 'Enter a whole number of seconds.';
+  else if (s.sessionSeconds < session.minSeconds || s.sessionSeconds > session.maxSeconds)
+    errors.sessionSeconds = `Choose between ${session.minSeconds} and ${session.maxSeconds} seconds.`;
+
+  const spawnTenths = s.spawnIntervalSeconds * 10;
+  if (!Number.isFinite(s.spawnIntervalSeconds) || s.spawnIntervalSeconds <= 0) errors.spawnIntervalSeconds = 'Enter a positive number of seconds.';
+  else if (s.spawnIntervalSeconds < spawn.minIntervalSeconds || s.spawnIntervalSeconds > spawn.maxIntervalSeconds)
+    errors.spawnIntervalSeconds = `Choose between ${spawn.minIntervalSeconds} and ${spawn.maxIntervalSeconds} seconds.`;
+  else if (Math.abs(spawnTenths - Math.round(spawnTenths)) > 1e-9) errors.spawnIntervalSeconds = 'Use at most one decimal place.';
+  return errors;
+}
+
 export type MatchConfig = GameConfig & MatchSettings;
 
 /** Snapshot taken when a match starts: later option changes only affect new matches. */

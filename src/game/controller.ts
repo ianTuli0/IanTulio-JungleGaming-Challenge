@@ -34,7 +34,6 @@ export interface MatchOutcome {
   durationMs: number;
   endReason: EndReason;
   settings: MatchSettings;
-  seed: number;
 }
 
 /**
@@ -254,7 +253,8 @@ export class GameController {
           break;
         case 'island-moved':
           audio.play('cannonball_water_hit_1', 0.5, 0.5);
-          if (e.island === 0) this.announce('The edge islands sank and resurfaced elsewhere.');
+          // The time left keeps each message unique: an identical text would not re-announce.
+          if (e.island === 0) this.announce(`The edge islands sank and resurfaced elsewhere. ${Math.ceil(sim.remaining)} seconds left.`);
           break;
         case 'ended':
           this.finish(e.reason);
@@ -283,7 +283,6 @@ export class GameController {
       durationMs: Math.round(sim.elapsed * 1000),
       endReason: reason,
       settings: { sessionSeconds: sim.config.sessionSeconds, spawnIntervalSeconds: sim.config.spawnIntervalSeconds },
-      seed: this.opts.seed,
     });
   }
 

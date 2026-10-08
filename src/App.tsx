@@ -59,10 +59,13 @@ export function App({ mocksEnabled }: { mocksEnabled: boolean }) {
   useEffect(() => audio.setMuted(!soundEnabled), [soundEnabled]);
 
   // Warm the texture and sound caches while the player reads the menu (errors surface on the game screen).
+  // Sounds go second: the match waits for the textures, and 5.8 MB of WAV must not slow them down.
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      import('./game/assets.ts').then((m) => m.loadGameAssets()).catch(() => undefined);
-      void audio.prefetch();
+      import('./game/assets.ts')
+        .then((m) => m.loadGameAssets())
+        .then(() => audio.prefetch())
+        .catch(() => undefined);
     }, 300);
     return () => window.clearTimeout(timer);
   }, []);

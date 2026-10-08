@@ -12,7 +12,7 @@ src/
 ├── settings.ts            validated options, player identity, last completed match
 ├── rng.ts                 seeded PRNG (simulation and mocks)
 ├── game/
-│   ├── config.ts          typed gameplay configuration + per-match snapshot
+│   ├── config.ts          typed gameplay configuration, per-match snapshot, options validation
 │   ├── arena.ts           map layout and colliders (signed distance field)
 │   ├── simulation.ts      rules: movement, AI, combat, spawns, end of match
 │   ├── simulation.check.ts  headless rule checks (npm run test:unit)
@@ -112,8 +112,10 @@ Continuous state (positions, velocities, cooldowns, timers) exists only in the s
   heading is within the aim tolerance of the player and its cooldown is ready.
 - Both kinds ease off the throttle in tight turns and obey the same hull collisions as the player.
 - **Spawns.** The first spawn comes after min(2 s, interval), then one every interval. Spawns are deferred,
-  not dropped, while `maxAlive` enemies are on the water. The first two spawns are always a Chaser then a
-  Shooter, so both kinds appear in every match. After that the kind is a seeded weighted pick.
+  not dropped, while `maxAlive` enemies are on the water: the clock does not bank time at the cap, so when
+  a slot frees one enemy spawns right away and the interval resumes (no burst of replacements). The first
+  two spawns are always a Chaser then a Shooter, so both kinds appear in every match. After that the kind
+  is a seeded weighted pick.
 - **Spawn points.** Candidates are cells within 150 units of the border that, at spawn time, are water with
   room for a full hull. Only points at least `minPlayerDistance` (420) from the player and clear of other
   ships are used. 420 is beyond the Shooter attack range (360) and gives a Chaser four seconds of travel,
@@ -197,6 +199,8 @@ reload) never reaches `recordMatch`, so it is never registered.
   - A record carries the match and player ids, end time, score, effective duration, end reason and
     configuration. It also has `ranked` and `playerName`: the name the player typed on the result screen
     (2–16 characters, validated on both sides), or empty when the match stays out of the ranking.
+    `isMatchRecord` (used for stored data and by the mock server) also requires a parseable date, options
+    inside the Options ranges (`validateSettings`) and a duration that fits the session.
 - **Leagues and order.** The ranking only lists `ranked` matches and only compares those with the same
   session time and spawn interval (the player's current Options). Order: score desc, then longer
   survival, then earlier `playedAt`, then `matchId`, so ties are always resolved the same way.
@@ -219,7 +223,9 @@ reload) never reaches `recordMatch`, so it is never registered.
   2. `usePendingSync` (mounted once) submits pending records on start-up (recovery after refresh), when
      one is added, every 20 s, and on the browser `online` event.
   3. The `submit-match` mutation retries retryable errors 3 times. When the server confirms, the record
-     leaves the queue and both `ranking` and `history` are invalidated.
+     leaves the queue and both `ranking` and `history` are invalidated. A record the server refuses for good
+     (a non-retryable 4xx) stays on the device but is not resent by the timer: only *Retry now* or a reload
+     tries it again.
   4. The result screen derives "Saved / Saving / Not saved yet + Retry now" from the queue and the
      mutation state; Match History lists waiting records with a *Retry now* button.
 - **Isolation.** The game never awaits the API. A failing or missing API only affects the two tabs and the
@@ -299,8 +305,9 @@ reload) never reaches `recordMatch`, so it is never registered.
   fullscreen) is `--touch`, 60px; inside each cluster the buttons are 3px apart. Each button uses pointer
   capture, so several fingers work at once (steer and fire). Behind the left buttons, holding the empty
   part of their box shows a stick (`MoveStick`, `game/stick.ts`). Its zone is a grid item spanning the
-  whole left cluster, and its ring is centred on that box and sized (3.4 x `--touch`) to cover all three
-  movement buttons, whatever the spot the finger landed on; the drag is measured from where the finger
+  whole left cluster, and its ring hugs the three movement buttons (3.3 x `--touch` wide, centred across
+  them and a little below the middle of the box, so it covers them with a small margin and stays on the
+  screen), whatever the spot the finger landed on; the drag is measured from where the finger
   landed and moves the knob inside the ring. Up sails forward, sideways turns, and down does nothing (there is
   no reverse). It maps to the same `forward`/`turnLeft`/`turnRight` booleans (`input.setStick()`), so it
   is an 8-direction stick, not a proportional one.
@@ -311,7 +318,8 @@ reload) never reaches `recordMatch`, so it is never registered.
 
 ## Testing
 
-- **Rules.** `npm run test:unit` runs `simulation.check.ts` headless: the simulation is plain TypeScript, so
+- **Rules.** `npm run test:unit` runs `simulation.check.ts` headless on Node's built-in test runner
+  (`node --test`, no dependency): the simulation is plain TypeScript, so
   collisions, damage, scoring, spawns and determinism are asserted without a browser.
 - **E2E (Playwright, `e2e/`).** Two Chromium projects, desktop and mobile (touch). Each test runs in a fresh
   browser context, and the tests drive the game only through its public inputs (keys, touches, buttons).
@@ -355,7 +363,8 @@ in 120 s.
   island before they touch it.
 - **Bunching.** All enemies share one flow field. They can bunch up near the player; push-apart keeps
   them from overlapping.
-- **Sound.** Sounds are uncompressed WAV (5.8 MB). They download in the background on the menu, but
+- **Sound.** Sounds are uncompressed WAV (5.8 MB). They download in the background on the menu, after the
+  textures so they do not compete with them (three unused UI sounds are skipped), but
   browsers only allow decoding after the first click (autoplay policy). On a slow connection the first
   sounds of the first match may therefore be missing.
 - **Local-only data.** The mock "server" stores data in each browser's localStorage. The player identity

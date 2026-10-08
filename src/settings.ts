@@ -1,13 +1,11 @@
 // Local persistence: player options, identity and the last completed match.
 import { isMatchRecord, type MatchRecord } from './api/contracts.ts';
-import { GAME_CONFIG, type MatchSettings } from './game/config.ts';
+import { GAME_CONFIG, validateSettings, type MatchSettings } from './game/config.ts';
 import { createStore, storage } from './store.ts';
 
 export interface Settings extends MatchSettings {
   soundEnabled: boolean;
 }
-
-export type SettingsErrors = Partial<Record<keyof MatchSettings, string>>;
 
 const KEYS = {
   settings: 'pirate-battle:settings',
@@ -22,20 +20,6 @@ export const DEFAULT_SETTINGS: Settings = {
   spawnIntervalSeconds: spawn.defaultIntervalSeconds,
   soundEnabled: true,
 };
-
-export function validateSettings(s: MatchSettings): SettingsErrors {
-  const errors: SettingsErrors = {};
-  if (!Number.isInteger(s.sessionSeconds)) errors.sessionSeconds = 'Enter a whole number of seconds.';
-  else if (s.sessionSeconds < session.minSeconds || s.sessionSeconds > session.maxSeconds)
-    errors.sessionSeconds = `Choose between ${session.minSeconds} and ${session.maxSeconds} seconds.`;
-
-  const spawnTenths = s.spawnIntervalSeconds * 10;
-  if (!Number.isFinite(s.spawnIntervalSeconds) || s.spawnIntervalSeconds <= 0) errors.spawnIntervalSeconds = 'Enter a positive number of seconds.';
-  else if (s.spawnIntervalSeconds < spawn.minIntervalSeconds || s.spawnIntervalSeconds > spawn.maxIntervalSeconds)
-    errors.spawnIntervalSeconds = `Choose between ${spawn.minIntervalSeconds} and ${spawn.maxIntervalSeconds} seconds.`;
-  else if (Math.abs(spawnTenths - Math.round(spawnTenths)) > 1e-9) errors.spawnIntervalSeconds = 'Use at most one decimal place.';
-  return errors;
-}
 
 function parseSettings(raw: unknown): Settings | null {
   const s = raw as Settings;

@@ -1,5 +1,5 @@
 // REST contracts shared by the Axios client and the MSW handlers.
-import type { EndReason, MatchSettings } from '../game/config.ts';
+import { validateSettings, type EndReason, type MatchSettings } from '../game/config.ts';
 
 export type { EndReason };
 
@@ -74,13 +74,14 @@ export function isMatchRecord(v: unknown): v is MatchRecord {
     typeof r.ranked === 'boolean' &&
     (r.ranked ? isValidCaptainName(r.playerName) : r.playerName === '') &&
     typeof r.playedAt === 'string' &&
+    Number.isFinite(Date.parse(r.playedAt)) &&
     Number.isInteger(r.score) &&
     r.score >= 0 &&
     Number.isFinite(r.durationMs) &&
     r.durationMs >= 0 &&
     (r.endReason === 'time-up' || r.endReason === 'destroyed') &&
     !!r.config &&
-    Number.isFinite(r.config.sessionSeconds) &&
-    Number.isFinite(r.config.spawnIntervalSeconds)
+    Object.keys(validateSettings(r.config)).length === 0 &&
+    r.durationMs <= r.config.sessionSeconds * 1000 + 1000 // a match never outlasts its session
   );
 }
