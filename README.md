@@ -6,6 +6,11 @@ ranking before the clock runs out.
 Built with **React 19**, **TypeScript (strict)**, **PixiJS 8**, **TanStack Query 5**, **Axios** and
 **MSW 3**, bundled with Vite.
 
+| Menu | Battle |
+| --- | --- |
+| ![Main menu with controls](docs/menu.jpg) | ![Battle with HUD, health bars and broadside](docs/battle.jpg) |
+| ![Pause dialog](docs/pause.jpg) | ![Captain's Log ranking](docs/ranking.jpg) |
+
 - [ARCHITECTURE.md](ARCHITECTURE.md): React/Pixi integration, simulation loop, collisions, resources,
   persistence, ranking and history integration, balancing decisions and limitations.
 - [PERFORMANCE.md](PERFORMANCE.md): profiling method and results.

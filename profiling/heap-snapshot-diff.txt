@@ -52,3 +52,14 @@ array                  551932     551456      -476
 Reading: the per-cycle JSHeapUsedSize growth is dominated by compiled code (V8 optimising the
 functions that run hot during combat), not by data retained from previous matches. See
 memory-12-cycles.log for the trend over twelve cycles on the production build.
+
+Follow-up (third run, same procedure): rendering-side instances after 2 vs after 5 cycles.
+
+constructor               after 2  after 5
+GlProgram                       0        0
+Shader                          5        5   (PixiJS module-level shaders, reused)
+WebGLProgram                    1        1
+BindGroup                       4        7   (PixiJS texture-batch bind group cache: ~1 small object per match)
+
+Shader programs do not accumulate across matches; the remaining slow growth is V8 compiled code and
+PixiJS's tiny global caches.

@@ -1,0 +1,11 @@
+ENV {"gpu":"ANGLE (AMD, AMD Radeon RX 580 2048SP (0x00006FDF) Direct3D11 vs_5_0 ps_5_0, D3D11)","browser":"Chrome/154.0.0.0","viewport":"1920x1080","dpr":1}
+MATCH {"seconds":89.78,"frames":12911,"avgFps":143.81,"p95FrameMs":7,"p99FrameMs":7.1,"maxFrameMs":41.6,"avgEntities":3.81,"peakEntities":13,"peakEffects":39,"peakEnemies":5,"peakBalls":4}
+MATCH {"seconds":33.75,"frames":4854,"avgFps":143.84,"p95FrameMs":7,"p99FrameMs":7.1,"maxFrameMs":27.9,"avgEntities":4.57,"peakEntities":8,"peakEffects":19,"peakEnemies":6,"peakBalls":3}
+MATCH {"seconds":78.11,"frames":11242,"avgFps":143.92,"p95FrameMs":7,"p99FrameMs":7.1,"maxFrameMs":20.8,"avgEntities":4.73,"peakEntities":12,"peakEffects":49,"peakEnemies":7,"peakBalls":5}
+AGGREGATE {"matches":3,"seconds":201.6,"avgFps":143.9,"worstP95FrameMs":7,"worstP99FrameMs":7.1,"maxFrameMs":41.6,"avgEntities":4.3,"peakEntities":13,"peakEffects":49}
+{"label":"menu, before the first match","heapMB":8.25,"domNodes":305,"listeners":356,"canvases":0}
+{"label":"after cycle 1 (20 s played, 4 enemies alive)","heapMB":9.23,"domNodes":310,"listeners":357,"canvases":0}
+{"label":"after cycle 2 (20 s played, 4 enemies alive)","heapMB":9.35,"domNodes":310,"listeners":358,"canvases":0}
+{"label":"after cycle 3 (20 s played, 4 enemies alive)","heapMB":9.46,"domNodes":310,"listeners":358,"canvases":0}
+{"label":"after cycle 4 (20 s played, 4 enemies alive)","heapMB":9.53,"domNodes":310,"listeners":358,"canvases":0}
+{"label":"after cycle 5 (20 s played, 4 enemies alive)","heapMB":9.62,"domNodes":310,"listeners":358,"canvases":0}

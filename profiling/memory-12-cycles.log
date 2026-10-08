@@ -1,0 +1,14 @@
+ENV {"gpu":"ANGLE (AMD, AMD Radeon RX 580 2048SP (0x00006FDF) Direct3D11 vs_5_0 ps_5_0, D3D11)","browser":"Chrome/154.0.0.0","viewport":"1920x1080","dpr":1}
+{"label":"menu, before the first match","heapMB":5.28,"domNodes":392,"listeners":374,"canvases":0}
+{"label":"after cycle 1 (20 s played, 3 enemies alive)","heapMB":5.89,"domNodes":201,"listeners":187,"canvases":0}
+{"label":"after cycle 2 (20 s played, 3 enemies alive)","heapMB":6.15,"domNodes":201,"listeners":188,"canvases":0}
+{"label":"after cycle 3 (20 s played, 3 enemies alive)","heapMB":6.4,"domNodes":201,"listeners":188,"canvases":0}
+{"label":"after cycle 4 (20 s played, 4 enemies alive)","heapMB":6.5,"domNodes":201,"listeners":189,"canvases":0}
+{"label":"after cycle 5 (21 s played, 4 enemies alive)","heapMB":6.65,"domNodes":201,"listeners":189,"canvases":0}
+{"label":"after cycle 6 (20 s played, 4 enemies alive)","heapMB":6.71,"domNodes":201,"listeners":189,"canvases":0}
+{"label":"after cycle 7 (20 s played, 4 enemies alive)","heapMB":6.76,"domNodes":201,"listeners":189,"canvases":0}
+{"label":"after cycle 8 (20 s played, 4 enemies alive)","heapMB":6.84,"domNodes":201,"listeners":189,"canvases":0}
+{"label":"after cycle 9 (20 s played, 3 enemies alive)","heapMB":7.18,"domNodes":201,"listeners":187,"canvases":0}
+{"label":"after cycle 10 (20 s played, 4 enemies alive)","heapMB":7.24,"domNodes":201,"listeners":189,"canvases":0}
+{"label":"after cycle 11 (20 s played, 3 enemies alive)","heapMB":7.3,"domNodes":201,"listeners":188,"canvases":0}
+{"label":"after cycle 12 (20 s played, 4 enemies alive)","heapMB":7.38,"domNodes":201,"listeners":189,"canvases":0}

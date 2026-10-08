@@ -1,0 +1,9 @@
+ENV {"gpu":"ANGLE (AMD, AMD Radeon RX 580 2048SP (0x00006FDF) Direct3D11 vs_5_0 ps_5_0, D3D11)","browser":"Chrome/154.0.0.0","viewport":"1920x1080","dpr":2}
+MATCH {"seconds":40.78,"frames":5842,"avgFps":143.27,"p95FrameMs":7,"p99FrameMs":7.1,"maxFrameMs":76.3,"avgEntities":7.25,"peakEntities":17,"peakEffects":47,"peakEnemies":10,"peakBalls":6}
+MATCH {"seconds":19.7,"frames":2816,"avgFps":142.97,"p95FrameMs":7.1,"p99FrameMs":7.1,"maxFrameMs":48.7,"avgEntities":8.6,"peakEntities":15,"peakEffects":31,"peakEnemies":10,"peakBalls":4}
+MATCH {"seconds":21.68,"frames":3107,"avgFps":143.33,"p95FrameMs":7,"p99FrameMs":7.1,"maxFrameMs":55.6,"avgEntities":8.66,"peakEntities":18,"peakEffects":68,"peakEnemies":10,"peakBalls":6}
+MATCH {"seconds":23.88,"frames":3420,"avgFps":143.2,"p95FrameMs":7,"p99FrameMs":7.1,"maxFrameMs":55.5,"avgEntities":9.85,"peakEntities":20,"peakEffects":54,"peakEnemies":10,"peakBalls":6}
+MATCH {"seconds":17.71,"frames":2528,"avgFps":142.71,"p95FrameMs":7,"p99FrameMs":7.1,"maxFrameMs":48.6,"avgEntities":8.47,"peakEntities":15,"peakEffects":50,"peakEnemies":10,"peakBalls":4}
+MATCH {"seconds":30.11,"frames":4317,"avgFps":143.36,"p95FrameMs":7,"p99FrameMs":7.1,"maxFrameMs":55.6,"avgEntities":7.18,"peakEntities":13,"peakEffects":63,"peakEnemies":10,"peakBalls":5}
+MATCH {"seconds":32.52,"frames":4659,"avgFps":143.28,"p95FrameMs":7,"p99FrameMs":7.1,"maxFrameMs":48.6,"avgEntities":9.28,"peakEntities":15,"peakEffects":48,"peakEnemies":10,"peakBalls":4}
+AGGREGATE {"matches":7,"seconds":186.4,"avgFps":143.2,"worstP95FrameMs":7.1,"worstP99FrameMs":7.1,"maxFrameMs":76.3,"avgEntities":8.3,"peakEntities":20,"peakEffects":68}
