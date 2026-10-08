@@ -1,6 +1,6 @@
 // 2. Asset loading: visible progress, failure, retry.
 import { expect, test, type Page } from '@playwright/test';
-import { playButton } from './helpers.ts';
+import { playButton, seedSettings } from './helpers.ts';
 
 // page.route() cannot see requests an active Service Worker handles, and MSW is one: these tests do not
 // need the mocked API, so the worker is blocked and the textures can really be held back or failed.
@@ -23,6 +23,7 @@ test('shows a loading state while the textures download, then starts the battle'
 });
 
 test('a failed texture download is reported, can be retried, and the retry works', async ({ page }) => {
+  await seedSettings(page, { spawnIntervalSeconds: 10 }); // real clock: on a loaded machine an idle ship must not sink before the canvas check
   let blocked = true;
   await page.route('**/*tiles_sheet*', (route) => (blocked ? route.abort() : route.continue()));
   await page.goto('/?debug');

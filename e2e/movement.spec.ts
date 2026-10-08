@@ -14,7 +14,7 @@ test('a match starts with full health, no score and a running clock', async ({ p
   expect(s.player.angle).toBeCloseTo(NORTH, 3);
   expect(s.enemies).toHaveLength(0);
   expect(s.projectiles).toBe(0);
-  expect(s.islands.length).toBeGreaterThan(0); // at least one island blocks ships and balls
+  expect(s.islands.length).toBeGreaterThan(0); // at least one island blocks ships (balls fly over)
   await expectHud(page, { hp: CFG.player.maxHp, score: 0 });
   await expect(hud(page).time).toContainText('02:00');
   await expect(page.locator('canvas')).toHaveCount(1);

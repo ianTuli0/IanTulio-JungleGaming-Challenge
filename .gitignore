@@ -18,8 +18,7 @@ dist/
 # Profiling reports are part of the delivery
 !profiling/*.log
 
-# Playwright output (regenerate with npm run test:e2e)
-playwright-report/
+# Playwright traces and screenshots; the HTML report in playwright-report/ is part of the delivery
 test-results/
 
 # Local notes

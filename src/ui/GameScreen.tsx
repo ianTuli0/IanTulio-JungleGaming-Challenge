@@ -103,7 +103,7 @@ function TouchControls({ game }: { game: GameController }) {
   );
 }
 
-const STICK_RADIUS = 56; // px: how far the knob can travel from the centre; ring (99px radius, see .stick-base) minus knob (39px radius) is 60
+const STICK_RADIUS = 56; // px: how far the knob can travel from the centre; ring (111px radius, see .stick-base) minus knob (39px radius) is 72
 const STICK_DEADZONE = 18; // px from the center before the ship reacts
 
 /**
